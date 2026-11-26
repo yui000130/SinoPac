@@ -48,6 +48,7 @@
 - 兩支手機上方各有「**示範 ▾**」選單（非產品畫面）：外婆紅包、跑步鞋 $1,200、夢想快轉與週日結算、切換年齡、跳到 18 歲；防詐情境、盜刷、24 小時未回覆、重新設定
 - 會依視窗大小等比縮放，電腦、投影、手機都能完整顯示
 - 也可以下載後直接用瀏覽器打開 `demo/index.html`
+- **離線版**：[`offline/MMA-Kids-Demo-離線版.html`](offline/MMA-Kids-Demo-離線版.html) 是單一檔案（CSS、JS 都內嵌），下載後雙擊即可使用，不需要網路，可直接傳給別人或存 USB。字型改用電腦內建字型；`demo/` 更新後需重新合成
 
 ## 文件
 
@@ -67,8 +68,10 @@ SinoPac/
 │   ├── 04-mma-kids-spec.md
 │   ├── 05-demo-notes.md
 │   └── 06-v2-review.md
-└── demo/
-    ├── index.html
-    ├── style.css
-    └── app.js
+├── demo/
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+└── offline/
+    └── MMA-Kids-Demo-離線版.html   # 離線單檔版（由 demo/ 合成）
 ```
