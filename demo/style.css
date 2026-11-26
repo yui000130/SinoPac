@@ -133,8 +133,26 @@ button.card{cursor:pointer}
 .jar .jp{font-size:16px;font-weight:800}
 .jar .jd{font-size:10px;color:var(--muted);line-height:1.4}
 .jar.save{background:var(--blueBg);border-color:#C8D9EC}
-.jar.spend{background:var(--greenBg);border-color:#BFE3D3}
-.jar.share{background:var(--pinkBg);border-color:#F1C7CB}
+.jar.need{background:var(--greenBg);border-color:#BFE3D3}
+.jar.want{background:var(--yellowBg);border-color:#F0D6A8}
+
+/* 三罐子比例調整（初次設定、錢包設定共用） */
+.jrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;border:1px solid var(--line);background:#fff}
+.jrow.save{background:var(--blueBg);border-color:#C8D9EC}
+.jrow.need{background:var(--greenBg);border-color:#BFE3D3}
+.jrow.want{background:var(--yellowBg);border-color:#F0D6A8}
+.jrow .jt{font-size:15px;font-weight:800}
+.jrow .jamt{font-size:12px;color:var(--muted)}
+.step{display:flex;align-items:center;gap:6px;margin-left:auto}
+.step .pc{width:46px;text-align:center;font-size:17px;font-weight:800}
+.sbtn2{width:34px;height:34px;border-radius:10px;border:1px solid #CDD5E0;background:#fff;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;color:#344054}
+.sbtn2:disabled{opacity:.35;cursor:default}
+.total{font-size:13px;font-weight:700;border-radius:10px;padding:8px 12px;text-align:center}
+.total.ok{background:var(--greenBg);color:var(--greenT)}
+.total.no{background:#FFF1DB;color:#5A3300}
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding:24px}
+.lbl-row{display:flex;align-items:center;justify-content:center;gap:8px}
+.minibtn{border:1px solid #CDD5E0;background:#fff;border-radius:99px;padding:0 10px;line-height:17px;font-size:11px;font-weight:700;color:var(--muted)}
 
 .safety{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .sbtn{border:1px solid #D3D8DF;background:var(--grayBg);color:#3F4753;border-radius:14px;min-height:46px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}
@@ -228,7 +246,7 @@ button.card{cursor:pointer}
 .lesson{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 12px;min-height:52px;width:100%;text-align:left}
 .lesson .li{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:none;background:var(--greenBg);color:var(--greenT)}
 .lesson .li .ico{width:16px;height:16px}
-.thumb{height:150px;border-radius:14px;background:linear-gradient(135deg,#2F8F6B,#3A6EA5);display:flex;align-items:center;justify-content:center;color:#fff;position:relative}
+.thumb{height:150px;flex:none;border-radius:14px;background:linear-gradient(135deg,#2F8F6B,#3A6EA5);display:flex;align-items:center;justify-content:center;color:#fff;position:relative}
 .thumb .playc{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center}
 .thumb .cap{position:absolute;left:12px;bottom:10px;font-size:12px;font-weight:700}
 .qbar{height:6px;border-radius:99px;background:#E3E8EF;overflow:hidden}
@@ -260,3 +278,50 @@ button.card{cursor:pointer}
 @keyframes down{0%{transform:translateY(-16px);opacity:0}100%{transform:translateY(0);opacity:1}}
 .fade{animation:pop .35s ease}
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+/* 首頁大圓餅：我的錢怎麼分／這週花在哪 */
+.piecard{align-items:center;gap:12px;padding:14px 14px 12px}
+.pietabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;background:var(--grayBg);border-radius:12px;padding:3px;width:100%}
+.pietabs button{border:0;background:none;border-radius:10px;min-height:34px;font-size:13px;font-weight:700;color:var(--muted)}
+.pietabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(31,42,55,.12)}
+.pie{width:190px;height:190px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;transition:background .4s}
+.pie .hole{width:112px;height:112px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.pie .hole b{font-size:24px;font-weight:800}
+.pleg{display:flex;align-items:center;gap:10px;border:0;background:var(--paper);border-radius:12px;padding:8px 12px;width:100%;text-align:left}
+button.pleg:hover{background:var(--grayBg)}
+.pl-t{font-size:15px;font-weight:800}
+.pl-p{font-size:13px;font-weight:700;color:var(--muted)}
+.pl-a{font-size:16px;font-weight:800}
+.pietip{display:flex;gap:8px;align-items:flex-start;background:var(--yellowBg);color:var(--yellowT);border-radius:12px;padding:9px 12px;font-size:13px;font-weight:700;line-height:1.55;width:100%}
+.pietip .ico{width:16px;height:16px;margin-top:2px}
+
+/* 付款碼頁：可疑詐騙按鈕 */
+.suspbtn{background:#FFF1DB;color:#8A4B00;border:1px solid #F0B75A}
+
+/* 18 歲升級 DAWHO 步驟列 */
+.dsteps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin-bottom:2px}
+.dsteps div{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;font-weight:700;color:var(--muted);text-align:center}
+.dsteps span{width:24px;height:24px;border-radius:50%;background:var(--grayBg);border:1px solid #D3D8DF;display:flex;align-items:center;justify-content:center;font-size:12px}
+.dsteps .on{color:var(--ink)}
+.dsteps .on span{background:var(--ink);border-color:var(--ink);color:#fff}
+.dsteps .done span{background:var(--green);border-color:var(--green);color:#fff}
+
+/* 防亂花錢設定：自訂金額輸入 */
+.limin{flex:1;display:flex;align-items:center;gap:4px;border:1px solid #CDD5E0;border-radius:10px;background:#fff;padding:0 10px;min-height:38px;font-weight:700;min-width:0}
+.limin input{border:0;outline:0;width:100%;min-width:0;font-size:14px;font-weight:700;background:transparent;font-family:inherit}
+.limin:focus-within{outline:3px solid #3A6EA5;outline-offset:1px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* 示範選單（非產品畫面，取代原本的示範控制台） */
+.phonecol{position:relative}
+.minibtn.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.demomenu{position:absolute;top:26px;left:50%;transform:translateX(-50%);width:280px;max-height:640px;overflow-y:auto;z-index:20;border:2px dashed #9AA6B8;background:#E9EDF2;border-radius:16px;padding:10px;display:flex;flex-direction:column;gap:5px;box-shadow:0 14px 30px rgba(31,42,55,.22);scrollbar-width:none}
+.dm-t{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.5px;padding-bottom:5px;border-bottom:1px dashed #AEB8C6}
+.dm-h{font-size:11px;font-weight:700;color:var(--muted);margin-top:4px}
+.dm-i{border:1px solid #AEB8C6;background:#fff;border-radius:10px;min-height:36px;padding:5px 10px;font-size:13px;font-weight:700;color:#344054;display:flex;align-items:center;gap:8px;text-align:left;width:100%}
+.dm-i:hover{background:#F8FAFC}
+.dm-i:disabled{opacity:.45;cursor:default}
+/* 轉帳日：一週七天排成一列 */
+.chips.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.chips.days .chip{padding:0}
+.limin input[type=time]{font-size:14px}

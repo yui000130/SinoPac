@@ -28,13 +28,33 @@ const CH = [
   {id:'sum',      n:'終', t:'對永豐的價值',       summary:true}
 ];
 
+// jar：付款時從哪個罐子扣（need＝需要罐、want＝想要罐）
 const MERCHANTS = [
-  {id:'tea',  store:'全家便利商店', name:'珍珠奶茶', amt:70,   cat:'飲食',     items:[['珍珠奶茶', 70]]},
-  {id:'bus',  store:'台北捷運公車', name:'公車',     amt:15,   cat:'交通',     items:null},
-  {id:'game', store:'遊戲平台',     name:'遊戲點數', amt:300,  cat:'遊戲儲值', items:null},
-  {id:'shoe', store:'運動用品店',   name:'跑步鞋',   amt:1200, cat:'服飾',     items:[['跑步鞋', 1200]]}
+  {id:'tea',  store:'全家便利商店', name:'珍珠奶茶', amt:70,   cat:'飲食',     jar:'want', items:[['珍珠奶茶', 70]]},
+  {id:'bus',  store:'台北捷運公車', name:'公車',     amt:15,   cat:'交通',     jar:'need', items:null},
+  {id:'draw', store:'文具店',       name:'美術課畫具組', amt:220, cat:'文具',   jar:'need', items:[['水彩組', 160], ['畫筆', 60]]},
+  {id:'game', store:'遊戲平台',     name:'遊戲點數', amt:300,  cat:'遊戲儲值', jar:'want', items:null},
+  {id:'shoe', store:'運動用品店',   name:'跑步鞋',   amt:1200, cat:'服飾',     jar:'want', items:[['跑步鞋', 1200]]}
 ];
-const REMIND_CATS = ['飲食', '娛樂'];
+// 可疑刷卡示範：不是小安本人刷的（卡號外流），超過刷卡上限＋境外，系統先擋下
+const FRAUD_TX = {store:'陌生海外網站', name:'線上點數卡', amt:3000, cat:'境外網購'};
+// 小安在付款碼頁按「這筆付款怪怪的」可選的狀況
+const SUSP_REASONS = ['陌生人要我掃他的碼或給他看付款碼', '店員收的金額跟我買的不一樣', '網路上有人叫我先付款才能拿東西', '我沒買東西，卻收到扣款通知'];
+// 刷卡上限與通知（家長在 DAWHO 設定）
+// 家長設定的兩個上限（超過任一個 → 通知家長，家長同意才付款）
+const SINGLE_OPTS = [300, 500, 1000];
+const BUDGET_OPTS = [1500, 2000, 3000];
+// 收支紀錄的分組：本週（今天、週一）／上週／本月稍早；本月已花＝所有消費加總
+const THIS_WEEK = ['今天', '週一'];
+const isWeek = t => THIS_WEEK.includes(t.when);
+const PAY_REASONS = ['這是學校要用的', '我已經想很久了', '有特價，想先買'];
+// 18 歲升級 DAWHO 的辦理步驟（示意，實際以永豐公告為準）
+const DAWHO_STEPS = ['確認身分', '確認資料', '帳戶設定', '同意條款', '審核'];
+const JAR_INFO = {
+  save:{t:'儲蓄', d:'存進夢想基金'},
+  need:{t:'需要', d:'交通、文具、午餐'},
+  want:{t:'想要', d:'飲料、零食、娛樂'}
+};
 const MAX_REMIND = 2;
 
 const LESSONS = [
@@ -67,6 +87,25 @@ const LESSONS = [
    q:'收到簡訊說「你的帳戶異常，請點連結重新驗證」，你該？', a:['不點連結，用「幫我看看」或告訴爸媽', '點進去看看是不是真的'], c:0,
    ok:'做得好！銀行不會用簡訊連結要你登入。', no:'這是釣魚連結，點進去可能被偷走帳號密碼！'}
 ];
+// 學堂「情境演練」：小安自己練習遇到詐騙怎麼做（演練模式，不會通知爸媽、不會動到錢）
+const DRILLS = [
+  {id:'mule', t:'陌生人轉錢給你，又要你轉出去', tag:'人頭帳戶', from:'網友傳來訊息',
+   msg:'我轉錯了，那 $5,000 是我的，幫我轉到這個帳戶：012-XXXX-XXXX，謝謝！',
+   ok:'不理他，告訴爸媽', bad:'照做，轉出 $5,000', badFirst:true,
+   why:'有人轉錢給你又要你轉出去，是常見的「人頭帳戶詐騙」。照做的話，你可能變成詐騙共犯，帳戶也會被凍結。',
+   real:'真的遇到時：陌生轉入會先被保留，媽媽會收到通知。'},
+  {id:'fake', t:'二手平台的買家要你操作網銀', tag:'假買家', from:'你在二手平台賣演唱會周邊，買家說：',
+   msg:'我付款失敗了，請你操作網銀「驗證帳戶」，再補轉 $300 給我。',
+   ok:'不轉，取消這筆交易', bad:'照他說的操作網銀',
+   why:'真正的買家付款，從來不需要賣家操作網銀，也不會要你「補轉」。這是「假買家詐騙」。',
+   real:'真的遇到時：轉帳前 App 會跳出提醒，第一次轉給新收款人也要爸媽同意。'},
+  {id:'code', t:'有人要你把付款碼傳給他', tag:'付款碼', from:'自稱超商店員的人傳訊息',
+   msg:'同學你好，我是超商店員，請把你的付款碼截圖傳給我，我先幫你結帳。',
+   ok:'不傳，按「可疑詐騙？通知爸媽」', bad:'截圖傳給他', badFirst:true,
+   why:'付款碼就像你的錢包，給別人看就可能被盜刷。店員只會在櫃台當面掃碼，不會要你傳截圖。',
+   real:'真的遇到時：在付款碼頁按「可疑詐騙？通知爸媽」，付款碼會先鎖住。'}
+];
+const drillOf = id => DRILLS.find(x => x.id === id);
 const SCAM_QUIZ = [
   {q:'買家說要你先操作網銀「驗證帳戶」，才能付款給你。你應該？', a:['照著做，先驗證', '拒絕，這是假買家詐騙', '先轉 $1 試試看'], c:1, ok:'答對了！真正的買家不會要你操作網銀'},
   {q:'網友說借你的帳戶收款可以賺 500 元，你該？', a:['答應，反正只是收錢', '拒絕，並告訴爸媽', '問他要不要多給一點'], c:1, ok:'答對了！借帳戶給別人，你可能變成詐騙共犯'},
@@ -81,7 +120,7 @@ const GIFTS = [
 ];
 const TASK_TPL = [
   {id:'antiScam', t:'防詐小達人',     cat:'學堂', ref:'看完「假買家詐騙」影片，並答對 3 題防詐題', link:'學堂進度自動同步'},
-  {id:'noOver',   t:'這週不超支',     cat:'預算', ref:'本週消費 ≤ 每週預算',                       link:'錢包自動計算'},
+  {id:'noOver',   t:'這週不超支',     cat:'預算', ref:'本週消費不超過需要罐＋想要罐',               link:'錢包自動計算'},
   {id:'tagAll',   t:'每一筆都想一下', cat:'記帳', ref:'這週每筆消費都標記需要／想要',               link:'錢包自動計算'},
   {id:'compare',  t:'比價小幫手',     cat:'親子', ref:'買東西前比 2 家，告訴爸媽為什麼選這家',     link:'孩子文字回報'},
   {id:'twoLess',  t:'上完 2 堂學堂',  cat:'學堂', ref:'任選 2 堂課並答對小測驗',                   link:'學堂進度自動同步'}
@@ -106,32 +145,46 @@ const LEVELS = {
   monthly: {t:'每月分類總額', kid:'每月分類總額'}
 };
 const DEFAULT_LEVEL = age => age <= 12 ? 'detail' : age <= 15 ? 'store' : 'monthly';
-const JAR_PRESETS = [[20, 70, 10], [30, 60, 10], [50, 40, 10]];
-const BUDGETS = [180, 240, 300];
+// 三罐子比例：[儲蓄, 需要, 想要]
+const JAR_PRESETS = [[30, 35, 35], [20, 40, 40], [40, 30, 30]];
+const ALLOW_OPTS = [500, 800, 1000];
+const DAY_OPTS = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];   // 一週七天都能選
+const RATIO_OPTS = [1, 0.5, 2];
+const TIME_OPTS = ['07:00', '12:00', '18:00'];
+const WEEKCAP_OPTS = [100, 200, 300];
+const GOALCAP_OPTS = [300, 600, 900];
+const WEEK_NEED_SPENT = 60;   // 示範：本週已從需要罐花掉的錢（早餐 $45＋公車 $15）
 const NOTE_CHIPS = ['我們之後一起再開始', '這個月先暫停一下', '你存得很棒，繼續加油'];
 const DECLINE_NOTE = {withdraw:'先存到目標再說喔！', big:'我們先一起討論看看', payee:'這個買家怪怪的，先不要轉'};
 
 // ================= 狀態 =================
 function initState() {
-  return {
-    ch:'home', kidView:'home', parView:'allowance', walletTab:'log',
+  const s = {
+    // setup：'parent'（媽媽先設定）→ 'kid'（小安設定三罐子）→ null（開始使用）
+    setup:'parent', jarDraft:null,
+    ch:'home', kidView:'home', parView:'overview', walletTab:'log',
     age:12, viewLevel:'detail',
-    // 日常錢包
-    balance:320, budget:240, weekSpent:60, jars:[20, 70, 10], shareJar:40,
-    allowance:{on:true, amount:300, paused:false, pauseFor:''},
+    // 日常錢包：need＝需要罐、want＝想要罐（兩罐合計＝可以用的錢）；儲蓄罐＝夢想基金的「我存的」
+    need:0, want:0, jars:[30, 35, 35],
+    allowance:{on:true, amount:500, day:'週一', time:'07:00', paused:false, pauseFor:''},
     family:['外婆', '外公'],
     tx:[
       {id:1, when:'今天', store:'7-ELEVEN', name:'早餐', amt:45, cat:'飲食', tag:'need', src:'carrier', items:[['鮪魚飯糰', 30], ['豆漿', 15]]},
       {id:2, when:'今天', store:'台北捷運公車', name:'公車', amt:15, cat:'交通', tag:'need', src:'card'},
-      {id:3, when:'週一', store:'家長零用錢', name:'零用錢入帳', amt:300, cat:'收入', income:true},
+      {id:3, when:'週一', store:'家長零用錢', name:'零用錢入帳', amt:500, cat:'收入', income:true},
       {id:4, when:'上週', store:'書局', name:'自動鉛筆', amt:35, cat:'文具', tag:null, src:'carrier', items:[['自動鉛筆', 35]]},
-      {id:5, when:'上週', store:'夜市', name:'雞排', amt:70, cat:'飲食', tag:'want', src:'manual'}
+      {id:5, when:'上週', store:'夜市', name:'雞排', amt:70, cat:'飲食', tag:'want', src:'manual'},
+      // 本月稍早：讓「本月已花」與收支紀錄、每月分類總額一致（合計 $1,200）
+      {id:6, when:'本月稍早', store:'學校福利社', name:'午餐（2 週）', amt:520, cat:'飲食', tag:'need', src:'card'},
+      {id:7, when:'本月稍早', store:'威秀影城', name:'電影票', amt:250, cat:'娛樂', tag:'want', src:'card'},
+      {id:8, when:'本月稍早', store:'誠品書店', name:'漫畫', amt:180, cat:'娛樂', tag:'want', src:'carrier', items:[['漫畫', 180]]},
+      {id:9, when:'本月稍早', store:'書局', name:'筆記本', amt:85, cat:'文具', tag:'need', src:'carrier', items:[['筆記本', 85]]}
     ],
     reviewPick:null, openTx:null,
     pay:null, remindToday:0,
     // 夢想基金與配對
     goal:{name:'球鞋基金', target:1800, saved:820},
-    match:{ratio:1, weekCap:50, goalCap:500, sources:{saveAtPay:true, sundayLeft:true, gift:false},
+    match:{ratio:1, weekCap:200, goalCap:600, sources:{saveAtPay:true, sundayLeft:true, gift:false},
            heldTotal:300, heldThisWeek:0, paused:false, keepHeld:true, note:''},
     goalReady:false, celebrate:null, goalsDone:0, saveCount:0,
     deposit:null, bigIn:null, pauseSheet:null,
@@ -144,17 +197,35 @@ function initState() {
     ],
     gifts:['late'], giftShow:null, giftList:false, doneSheet:null, newTask:null, reportOf:null,
     // 學堂
-    lessonsDone:['fakebuyer'], lesson:null, quizPick:null, scamQuiz:null,
+    lessonsDone:['fakebuyer'], drillsDone:[], lesson:null, quizPick:null, scamQuiz:null,
     // 安全
-    dayLimit:1500, threshold:1000, newPayee:true, blocked:{game:true, crypto:true, overseas:false},
+    // 家長設定：monthBudget 每月上限／threshold 單筆上限；超過任一個 → 通知家長並等同意
+    monthBudget:2000, monthSpent:0, threshold:1000,
+    newPayee:true, blocked:{game:true, crypto:true, overseas:false},
+    cardFrozen:false, payLocked:false, susp:null,
+    homePie:'plan', jarSheet:false, limitEdit:null, demoMenu:null,
     approvals:[], approvalReq:null,
     heldIncoming:null, scene:null, help:null, frozen:false,
     check:null,
     // 長期
-    grown:false,
+    grown:false, dawho:{step:0, id:[false, false, false], fund:'keep', agree:[false, false], share:true},
     // 同步
     feed:[], alerts:[], kidToast:'', parToast:''
   };
+  fillWeek(s);
+  s.monthSpent = s.tx.filter(t => !t.income).reduce((a, t) => a + t.amt, 0);   // $1,200
+  return s;
+}
+// 依零用錢與三罐子比例，算出每次入帳分到各罐的金額
+function portions(s = state) {
+  const a = s.allowance.amount, save = Math.round(a * s.jars[0] / 100), need = Math.round(a * s.jars[1] / 100);
+  return {save, need, want:a - save - need};
+}
+// 示範起點：本週一的零用錢已依設定入帳，需要罐已花掉早餐＋公車
+function fillWeek(s) {
+  const p = portions(s);
+  s.need = Math.max(0, p.need - WEEK_NEED_SPENT); s.want = p.want;
+  const t = s.tx.find(x => x.id === 3); if (t) t.amt = s.allowance.amount;
 }
 let state = initState();
 const timers = {};
@@ -231,6 +302,13 @@ const BARCODE = `<svg width="200" height="36" viewBox="0 0 100 20" preserveAspec
 
 // ================= 計算 =================
 function heldAll() { return state.match.heldTotal + state.match.heldThisWeek; }
+const bal = () => state.need + state.want;   // 可以用的錢＝需要罐＋想要罐
+// 從指定罐子扣錢；不夠時從另一個罐子補（呼叫前需確認兩罐合計足夠）
+function take(amt, first = 'want') {
+  const s = state, other = first === 'want' ? 'need' : 'want';
+  const a = Math.min(s[first], amt);
+  s[first] -= a; s[other] = Math.max(0, s[other] - (amt - a));
+}
 function pct(saved, held) { return Math.min(100, Math.round((saved + held) / state.goal.target * 100)); }
 // 依家長設定計算這筆存款可以配對多少（孩子端不顯示公式）
 function matchFor(amount, srcKey) {
@@ -242,15 +320,14 @@ function derive() {
   const s = state, held = heldAll();
   const progress = pct(s.goal.saved, held);
   const remain = Math.max(0, s.goal.target - s.goal.saved - held);
-  const weekLeft = Math.max(0, s.budget - s.weekSpent);
-  const perWeek = Math.round(s.allowance.on ? s.allowance.amount * s.jars[0] / 100 : 0) + (s.match.paused ? 0 : s.match.weekCap);
+  const perWeek = (s.allowance.on && !s.allowance.paused ? portions().save : 0) + (s.match.paused ? 0 : s.match.weekCap);
   const spends = s.tx.filter(t => !t.income);
   const need = spends.filter(t => t.tag === 'need').reduce((a, t) => a + t.amt, 0);
   const want = spends.filter(t => t.tag === 'want').reduce((a, t) => a + t.amt, 0);
   const tagged = need + want;
-  const weekTx = s.tx.filter(t => t.when !== '上週');
+  const weekTx = s.tx.filter(isWeek);
   return {
-    held, progress, remain, weekLeft, perWeek,
+    held, progress, remain, perWeek,
     eta: remain === 0 ? '已達成！' : perWeek ? `照現在的速度，約 ${Math.ceil(remain / perWeek)} 週後達成` : '持續存錢，就會越來越近',
     needPct: tagged ? Math.round(need / tagged * 100) : 0,
     untagged: spends.filter(t => !t.tag).length,
@@ -364,7 +441,13 @@ function viewSummary() {
 const kidTitles = {home:'嗨，小安', pay:'付款', dream:'夢想', task:'我的任務', school:'學堂', wallet:'日常錢包'};
 function viewKid(d) {
   const s = state;
-  if (s.grown) return `<div class="ph"><div class="scr">${kidGrown()}</div></div>`;
+  if (s.grown) return `<div class="ph"><div class="scr">${kidGrown()}
+    ${s.kidToast ? `<div class="toast" role="status">${ic('bell')}<span>${esc(s.kidToast)}</span></div>` : ''}</div></div>`;
+  if (s.setup) return `<div class="ph"><div class="scr">
+    <div class="top"><div class="col"><span class="app-n">MMA KIDS｜初次設定</span><span class="ttl">${s.setup === 'kid' ? '分配我的零用錢' : '嗨，小安'}</span></div><div class="avatar">安</div></div>
+    ${kidSetup()}
+    ${s.kidToast ? `<div class="toast" role="status">${ic('bell')}<span>${esc(s.kidToast)}</span></div>` : ''}
+  </div></div>`;
   const v = s.kidView;
   const views = {home:kidHome, pay:kidPay, dream:kidDream, task:kidTask, school:kidSchool, wallet:kidWallet};
   const tab = (id, label, icon) => `<button class="tab ${v === id || (id === 'home' && v === 'pay') ? 'on' : ''}" data-act="kv" data-arg="${id}">${ic(icon)}${label}</button>`;
@@ -404,19 +487,14 @@ function kidHome(d) {
           <button class="btn b-line" style="min-height:40px;font-size:13px" data-act="openDeposit" data-arg="gift">自己決定</button>
           <button class="btn b-gray" style="min-height:40px;font-size:13px" data-act="bigSkip">先不要</button>
         </div></div>` : ''}
-    <button class="card c-green" data-act="kv" data-arg="wallet">
-      ${al ? `<span class="sm t-green" style="font-weight:700">本週還能花</span>
-        <span class="big t-green">$${fmt(d.weekLeft)}</span>
-        <div class="track thin"><div class="seg green" style="width:${(d.weekLeft / s.budget * 100).toFixed(1)}%"></div></div>
-        <span class="xs">每週預算 $${fmt(s.budget)}・可以用的錢 $${fmt(s.balance)}</span>`
-      : `<span class="sm t-green" style="font-weight:700">可以用的錢</span><span class="big t-green">$${fmt(s.balance)}</span>`}
-    </button>
+    ${s.cardFrozen ? `<div class="banner warn">${ic('lock')}<span>卡片已暫停・媽媽正在處理，新卡補發中；手機付款碼照常可以用</span></div>` : ''}
+    ${moneyPie(d)}
+    <div class="row sb" style="padding:0 4px"><span class="sm">可以用的錢（需要＋想要）</span><b class="t-green" style="font-size:20px">$${fmt(bal())}</b></div>
+    ${al && !s.allowance.paused ? `<span class="xs" style="padding:0 4px;margin-top:-8px">每${s.allowance.day} ${s.allowance.time} 零用錢入帳</span>` : ''}
+    <div class="card" style="gap:6px;padding:12px 14px"><div class="row sb"><span class="sm" style="font-weight:700">這個月還能花</span><span class="sm">還剩 <b class="${s.monthSpent / s.monthBudget >= .8 ? 't-pink' : 't-green'}">$${fmt(Math.max(0, s.monthBudget - s.monthSpent))}</b>／$${fmt(s.monthBudget)}</span></div>
+      <div class="track thin"><div class="seg ${s.monthSpent / s.monthBudget >= .8 ? 'pink' : 'green'}" style="width:${Math.min(100, s.monthSpent / s.monthBudget * 100).toFixed(1)}%"></div></div>
+      <span class="xs">超過每月上限或單筆 $${fmt(s.threshold)}，要先問過爸媽</span></div>
     <button class="btn b-green" data-act="openPay">${ic('phone')}出示付款碼</button>
-    <div class="jars">
-      <button class="jar save" data-act="kv" data-arg="dream"><span class="jn t-blue">儲蓄 ${s.jars[0]}%</span><span class="jp t-blue">${d.progress}%</span><span class="jd">存進${s.goal.name}</span></button>
-      <button class="jar spend" data-act="kv" data-arg="wallet"><span class="jn t-green">消費 ${s.jars[1]}%</span><span class="jp t-green">$${fmt(s.balance)}</span><span class="jd">可以用的錢</span></button>
-      <div class="jar share"><span class="jn t-pink">分享 ${s.jars[2]}%</span><span class="jp t-pink">$${fmt(s.shareJar)}</span><span class="jd">送禮或捐款（之後開放）</span></div>
-    </div>
     <button class="card c-blue" data-act="kv" data-arg="dream">
       <div class="row sb" style="width:100%"><span class="h3 t-blue">${ic('star', 'width:16px;height:16px;display:inline;vertical-align:-3px')} ${s.goal.name}</span><span class="h3 t-blue">${d.progress}%</span></div>
       ${dreamBar(d, null, true)}
@@ -434,6 +512,50 @@ function kidHome(d) {
     <div class="seeline">${ic('eye')}媽媽可以看到：${LEVELS[s.viewLevel].kid}</div>`;
 }
 
+// ---------- 首頁大圓餅：我的錢怎麼分／這週花在哪 ----------
+const PIE_COLOR = {save:'var(--blue)', need:'var(--green)', want:'#E9A93A', none:'#C9CFD8'};
+function pieBg(parts) {   // parts: [[key, value]]，回傳 conic-gradient
+  const total = parts.reduce((a, [, v]) => a + v, 0);
+  if (!total) return '#E3E8EF';
+  let acc = 0;
+  return `conic-gradient(${parts.filter(([, v]) => v > 0).map(([k, v]) => { const a = acc; acc += v / total * 360; return `${PIE_COLOR[k]} ${a.toFixed(1)}deg ${acc.toFixed(1)}deg`; }).join(',')})`;
+}
+function moneyPie() {
+  const s = state, mode = s.homePie, p = portions();
+  const tabs = `<div class="pietabs">${[['plan', '我的錢怎麼分'], ['spent', '這週花在哪']].map(([k, l]) => `<button class="${mode === k ? 'on' : ''}" data-act="homePie" data-arg="${k}">${l}</button>`).join('')}</div>`;
+  if (mode === 'plan') {
+    const leg = (k, i, amt, sub, act) => `<button class="pleg" data-act="${act[0]}" data-arg="${act[1]}">
+        <span class="dotc" style="background:${PIE_COLOR[k]};width:14px;height:14px"></span>
+        <span class="col" style="flex:1"><span class="pl-t">${JAR_INFO[k].t} <span class="pl-p">${s.jars[i]}%</span></span><span class="xs">${sub}</span></span>
+        <b class="pl-a">$${fmt(amt)}</b></button>`;
+    return `<div class="card piecard">${tabs}
+      <div class="pie" style="background:${pieBg([['save', s.jars[0]], ['need', s.jars[1]], ['want', s.jars[2]]])}">
+        <div class="hole"><span class="xs">每週零用錢</span><b>$${fmt(s.allowance.amount)}</b></div></div>
+      <div class="col" style="gap:4px;width:100%">
+        ${leg('save', 0, s.goal.saved, `每週存 $${fmt(p.save)}・存進${s.goal.name}`, ['kv', 'dream'])}
+        ${leg('need', 1, s.need, `罐裡還剩・${JAR_INFO.need.d}`, ['openJars', ''])}
+        ${leg('want', 2, s.want, `罐裡還剩・${JAR_INFO.want.d}`, ['openJars', ''])}</div>
+      <div class="pietip">${ic('star')}<span>每拿到 $100，有 $${s.jars[0]} 先存進夢想。${s.jars[0] >= 30 ? '先存再花，很棒！' : '多存一點，夢想更快達成！'}</span></div>
+      <button class="link" style="padding:0" data-act="openJars">調整三罐子比例</button></div>`;
+  }
+  // 這週花在哪：依小安標記的需要／想要（未標記另外算）
+  const wk = s.tx.filter(t => !t.income && isWeek(t));
+  const sum = tag => wk.filter(t => (t.tag || 'none') === tag).reduce((a, t) => a + t.amt, 0);
+  const need = sum('need'), want = sum('want'), none = sum('none'), total = need + want + none;
+  const pc = v => total ? Math.round(v / total * 100) : 0;
+  const tip = !total ? '這週還沒花錢，繼續保持！'
+    : none ? `還有 $${fmt(none)} 沒標記，到錢包點一下就能補標。`
+    : want > need ? '這週「想要」花得比「需要」多，下次買之前先想一想：沒有它會怎樣？'
+    : '做得好！大部分的錢都花在「需要」的東西上。';
+  const row = (k, lbl, v) => `<div class="pleg static"><span class="dotc" style="background:${PIE_COLOR[k]};width:14px;height:14px"></span>
+      <span class="pl-t" style="flex:1">${lbl} <span class="pl-p">${pc(v)}%</span></span><b class="pl-a">$${fmt(v)}</b></div>`;
+  return `<div class="card piecard">${tabs}
+    <div class="pie" style="background:${pieBg([['need', need], ['want', want], ['none', none]])}">
+      <div class="hole"><span class="xs">這週花了</span><b>$${fmt(total)}</b></div></div>
+    <div class="col" style="gap:4px;width:100%">${row('need', '需要', need)}${row('want', '想要', want)}${none ? row('none', '還沒標記', none) : ''}</div>
+    <div class="pietip">${ic('star')}<span>${tip}</span></div></div>`;
+}
+
 function progText(t) {
   if (!t.prog) return t.status === 'waiting' ? '已回報' : '';
   return t.prog.type === 'quiz' ? `答對 ${t.prog.done} / ${t.prog.total} 題` : `第 ${t.prog.done}/${t.prog.total} 天`;
@@ -442,46 +564,74 @@ function progText(t) {
 // ---------- 付款 ----------
 function kidPay(d) {
   const s = state, p = s.pay;
-  if (!p || p.step === 'code') return `
+  if (!p || p.step === 'code') return s.payLocked ? `
+    <div class="card center c-yellow fade" style="padding:24px 16px">${ic('lock', 'width:40px;height:40px;color:#8A4B00')}
+      <span class="h3" style="font-size:17px">付款碼暫時鎖住了</span>
+      <span class="sm" style="line-height:1.6">你回報了可疑付款，媽媽已經收到通知。<br>鎖住的時候，別人拿到付款碼也不能用。</span></div>
+    <div class="card"><span class="h3">接下來這樣做</span>
+      ${['不要再把付款碼或卡號給別人看', '不要再轉錢或付款給對方', '等媽媽打電話給你，一起處理'].map(t => `<div class="row" style="font-size:13px">${ic('check', 'width:16px;height:16px;color:var(--greenT)')}${t}</div>`).join('')}</div>
+    <div class="hotline">${ic('phoneCall')}<span class="sm">遇到詐騙，打 <b>165</b> 反詐騙專線</span></div>` : `
     <div class="card center" style="padding:20px 16px">
       <span class="sm">請店員掃描，或靠近感應</span>
       <div class="qr">${QR}</div>
       <div class="col" style="align-items:center;gap:4px;border-top:1px dashed #CDD5E0;padding-top:10px;width:100%">${BARCODE}<span class="xs">手機條碼載具 /MK8+K2Q・自動記帳</span></div>
     </div>
-    <span class="xs" style="text-align:center">示範：點選下方店家，模擬店員掃碼</span>
-    ${MERCHANTS.filter(m => m.id !== 'shoe').map(m => `<button class="btn b-line" data-act="scan" data-arg="${m.id}">${m.store}：${m.name} $${fmt(m.amt)}</button>`).join('')}`;
+    <button class="btn suspbtn" data-act="openSusp">${ic('shieldAlert')}可疑詐騙？通知爸媽</button>
+    <span class="xs" style="text-align:center">這個月還能花 $${fmt(Math.max(0, s.monthBudget - s.monthSpent))}・單筆超過 $${fmt(s.threshold)} 要爸媽同意</span>
+    <span class="xs" style="text-align:center;margin-top:4px">示範：點選下方店家，模擬店員掃碼</span>
+    ${MERCHANTS.filter(m => m.id !== 'shoe').map(m => `<button class="btn b-line" data-act="scan" data-arg="${m.id}">${m.store}：${m.name} $${fmt(m.amt)}</button>`).join('')}
+    <span class="xs" style="text-align:center">跑步鞋 $1,200、盜刷情境在手機上方「示範 ▾」</span>`;
   const m = p.m;
-  if (p.step === 'blocked') return `
+  if (p.step === 'blocked') {
+    const why = {
+      cat:['這個類別目前不能付款', `「${m.cat}」已被爸媽設為封鎖類別。想買的話，可以先跟爸媽討論看看。`]    }[p.why || 'cat'];
+    return `
     <div class="card center fade" style="padding:24px 16px">${ic('shield', 'width:40px;height:40px;color:var(--gray)')}
-      <span class="h3" style="font-size:17px">這個類別目前不能付款</span>
-      <span class="sm" style="line-height:1.6">「${m.cat}」已被爸媽設為封鎖類別。想買的話，可以先跟爸媽討論看看。</span></div>
+      <span class="h3" style="font-size:17px">${why[0]}</span>
+      <span class="sm" style="line-height:1.6">${why[1]}</span></div>
     <button class="btn b-line" data-act="kv" data-arg="home">知道了</button>`;
+  }
   if (p.step === 'approval') return `
     <div class="card fade"><span class="sm">${m.store}</span><span class="mid">${m.name} $${fmt(m.amt)}</span></div>
-    <div class="card c-gray"><span class="h3">這筆需要爸媽同意</span><span class="sm" style="line-height:1.6">單筆 $${fmt(s.threshold)} 以上的消費，要先請爸媽在 DAWHO 同意。</span>
+    <div class="card c-gray"><span class="h3">這筆需要爸媽同意</span>
+      ${(p.why || overLimits(m)).map(w => `<div class="row" style="font-size:13px;line-height:1.5">${ic('shieldAlert', 'width:16px;height:16px;color:#8A4B00')}<span>${w}</span></div>`).join('')}
+      <span class="sm" style="line-height:1.6">送出後媽媽會收到通知，在 DAWHO 按同意才會付款。</span>
       <span class="xs">想說的話（選填）</span>
-      <div class="chips">${['球鞋有特價，想先買便宜的', '我已經存了很久'].map((r, i) => `<button class="chip s ${p.reason === i ? 'on' : ''}" data-act="payReason" data-arg="${i}">${r}</button>`).join('')}</div></div>
+      <div class="chips">${PAY_REASONS.map((r, i) => `<button class="chip s ${p.reason === i ? 'on' : ''}" data-act="payReason" data-arg="${i}">${r}</button>`).join('')}</div></div>
     <button class="btn b-green" data-act="sendApproval" data-arg="big">送出給爸媽</button>
     <button class="btn b-line" data-act="kv" data-arg="home">取消</button>`;
   if (p.step === 'choice') {
-    const me = m.amt, mom = matchFor(me, 'saveAtPay');
+    const me = m.amt, mom = matchFor(me, 'saveAtPay');   // 「存起來」：這筆錢從罐子移進夢想，不付款
     const newP = pct(s.goal.saved + me, d.held + mom);
     return `
       <div class="card"><span class="sm">${m.store}</span><span class="mid">${m.name} $${m.amt}</span></div>
       <span class="h3" style="font-size:17px">這 $${m.amt} 你想怎麼用？</span>
       <button class="paycard a" data-act="payBuy">
         <div class="row sb"><span class="big2">買下去</span><span class="sm" style="font-weight:700">${s.goal.name.replace('基金', '')} ${d.progress}%</span></div>
-        <span class="xs">夢想進度不變</span></button>
+        <span class="xs">夢想進度不變・${JAR_INFO[m.jar].t}罐 $${fmt(s[m.jar])} → $${fmt(Math.max(0, s[m.jar] - me))}</span></button>
       <button class="paycard b" data-act="paySave">
         <div class="row sb"><span class="big2 t-blue">存起來</span><span class="h3 t-blue">${d.progress}% → ${newP}%</span></div>
         ${dreamBar(d, {me, mom}, true)}
         <span class="xs">我 +$${me}${mom ? `　<span class="t-pink" style="font-weight:700">媽媽配對 +$${mom}</span>` : s.match.paused ? '　媽媽的配對暫停中' : ''}</span>
         <span class="h3 t-blue" style="font-size:13px">夢想進度 +${newP - d.progress}%</span></button>
-      <span class="xs" style="text-align:center">不會擋你付款，選一個就好</span>`;
+      <span class="xs" style="text-align:center">不會擋你付款，選一個就好</span>
+      <button class="link" data-act="openSusp" data-arg="1">金額不對？回報可疑付款</button>`;
+  }
+  if (p.step === 'borrow') {
+    const other = m.jar === 'want' ? 'need' : 'want', short = m.amt - s[m.jar];
+    return `
+    <div class="card fade"><span class="sm">${m.store}</span><span class="mid">${m.name} $${fmt(m.amt)}</span></div>
+    <div class="card c-yellow"><span class="h3">${JAR_INFO[m.jar].t}罐不夠喔</span>
+      <span class="sm" style="line-height:1.6">${JAR_INFO[m.jar].t}罐只剩 $${fmt(s[m.jar])}，還差 $${fmt(short)}。要用${JAR_INFO[other].t}罐的錢補嗎？</span>
+      <span class="xs">${JAR_INFO[other].t}罐目前 $${fmt(s[other])}，補完剩 $${fmt(s[other] - short)}</span></div>
+    <button class="btn b-green" data-act="payBorrow">用${JAR_INFO[other].t}罐補 $${fmt(short)}</button>
+    <button class="btn b-line" data-act="kv" data-arg="home">先不要買</button>`;
   }
   if (p.step === 'confirm') return `
-    <div class="card center fade" style="padding:22px 16px"><span class="sm">${m.store}</span><span class="mid">${m.name}</span><span class="big">$${fmt(m.amt)}</span></div>
-    <button class="btn b-green" data-act="payBuy">確認付款</button>`;
+    <div class="card center fade" style="padding:22px 16px"><span class="sm">${m.store}</span><span class="mid">${m.name}</span><span class="big">$${fmt(m.amt)}</span>
+      <span class="xs">從${JAR_INFO[m.jar].t}罐付款（目前 $${fmt(s[m.jar])}）</span></div>
+    <button class="btn b-green" data-act="payBuy">確認付款</button>
+    <button class="link" data-act="openSusp" data-arg="1">金額不對？回報可疑付款</button>`;
   if (p.step === 'tag') return `
     <div class="card center fade" style="padding:20px 16px">${ic('check', 'width:40px;height:40px;color:var(--greenT)')}
       <span class="h3" style="font-size:18px">付款成功 $${fmt(m.amt)}</span><span class="sm">已用載具自動記帳</span></div>
@@ -491,7 +641,7 @@ function kidPay(d) {
         <button class="btn b-blue" style="min-height:58px;font-size:17px" data-act="tagPay" data-arg="need">需要</button>
         <button class="btn b-yellow" style="min-height:58px;font-size:17px" data-act="tagPay" data-arg="want">想要</button></div></div>`;
   return `
-    <div class="card fade"><span class="h3">記好了！</span><span class="sm" style="line-height:1.6">本週還能花 $${fmt(d.weekLeft)}。</span></div>
+    <div class="card fade"><span class="h3">記好了！</span><span class="sm" style="line-height:1.6">需要罐還剩 $${fmt(s.need)}・想要罐還剩 $${fmt(s.want)}</span></div>
     <button class="btn b-green" data-act="kv" data-arg="home">回首頁</button>
     <button class="btn b-line" data-act="kv" data-arg="wallet">看我的錢包</button>`;
 }
@@ -557,7 +707,9 @@ function kidSchool() {
       <div class="card fade"><span class="xs">${l.grp}・約 3 分鐘</span><span class="h3" style="font-size:18px">${l.t}</span><span style="font-size:14px;line-height:1.75">${l.body}</span></div>
       <div class="card"><span class="h3">小測驗</span><span style="font-size:14px;line-height:1.6">${l.q}</span>
         ${l.a.map((a, i) => `<button class="opt ${!ans ? '' : i === l.c ? 'right' : i === s.quizPick ? 'wrong' : ''}" data-act="answer" data-arg="${i}">${a}</button>`).join('')}
-        ${ans ? `<div class="fb ${right ? 'ok' : 'no'} fade">${right ? l.ok : l.no}</div>` : ''}</div>`;
+        ${ans ? `<div class="fb ${right ? 'ok' : 'no'} fade">${right ? l.ok : `${l.no}<br>再選一次試試看！`}</div>` : ''}</div>
+      ${right ? `<button class="btn b-green fade" data-act="closeLesson">${ic('check')}完成課程，回到學堂</button>`
+        : '<button class="btn b-line" data-act="closeLesson">先回到學堂</button>'}`;
   }
   const at = taskOf('antiScam');
   const row = l => `<button class="lesson" data-act="openLesson" data-arg="${l.id}">
@@ -572,6 +724,12 @@ function kidSchool() {
     ${at ? `<button class="lesson" data-act="startQuiz" style="border-color:#E3B86A"><span class="li" style="background:var(--yellowBg);color:var(--yellowT)">${ic('shield')}</span>
       <span class="col" style="flex:1"><span style="font-size:14px;font-weight:700">防詐小測驗</span><span class="xs">3 題・${at.prog ? `已答對 ${at.prog.done} 題` : ''}</span></span><span class="tag task">任務</span></button>` : ''}
     ${LESSONS.filter(l => l.grp === '防詐').map(row).join('')}
+    <span class="h3" style="margin-top:4px">防詐情境演練</span>
+    <span class="xs" style="margin-top:-6px">模擬真的會遇到的對話，選一個你會怎麼做（演練不會通知爸媽）</span>
+    ${DRILLS.map(x => `<button class="lesson" data-act="drill" data-arg="${x.id}">
+      <span class="li" style="background:#FFF1DB;color:#8A4B00">${ic('shieldAlert')}</span>
+      <span class="col" style="flex:1"><span style="font-size:14px;font-weight:700">${x.t}</span><span class="xs">情境演練・${x.tag}・1 分鐘</span></span>
+      ${s.drillsDone.includes(x.id) ? '<span class="tag ok">已完成</span>' : ''}</button>`).join('')}
     <div class="hotline">${ic('phoneCall')}<span class="sm">遇到可疑的事，打 <b>165</b> 反詐騙專線</span></div>`;
 }
 function kidQuiz() {
@@ -583,23 +741,16 @@ function kidQuiz() {
     <div class="card"><span style="font-size:15px;line-height:1.6;font-weight:700">${item.q}</span>
       ${item.a.map((a, i) => `<button class="opt ${!ans ? '' : i === item.c ? 'right' : i === q.pick ? 'wrong' : ''}" data-act="quizAnswer" data-arg="${i}"><span class="k">${'ABC'[i]}</span>${a}</button>`).join('')}</div>
     ${ans ? (right ? `<div class="fb ok fade"><b>${item.ok}</b><br>遇到可疑的事，打 165 反詐騙專線</div>
-        ${q.idx < 2 ? '<button class="btn b-green" data-act="quizNext">下一題</button>' : '<button class="btn b-green" data-act="closeQuiz">完成，回到學堂</button>'}`
-      : '<div class="fb no fade">再想想看，選另一個答案試試。</div>') : ''}`;
+        ${q.idx < 2 ? '<button class="btn b-green" data-act="quizNext">下一題</button>' : `<button class="btn b-green" data-act="closeQuiz">${ic('check')}完成測驗，回到學堂</button>`}`
+      : '<div class="fb no fade">再想想看，選另一個答案試試。</div>') : ''}
+    ${right && q.idx === 2 ? '' : '<button class="btn b-line" data-act="closeQuiz">先回到學堂，下次再做</button>'}`;
 }
 
 // ---------- 錢包 ----------
 function kidWallet(d) {
-  const s = state, tab = s.walletTab;
-  const head = `<div class="chips" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr))">
-    <button class="chip ${tab === 'log' ? 'on' : ''}" data-act="walletTab" data-arg="log">收支紀錄</button>
-    <button class="chip ${tab === 'set' ? 'on' : ''}" data-act="walletTab" data-arg="set">預算設定</button></div>`;
-  if (tab === 'set') return head + `
-    <div class="card"><span class="h3">三罐子分配</span><span class="xs">零用錢入帳時自動分配</span>
-      <div class="col" style="gap:6px;margin-top:4px">${JAR_PRESETS.map((p, i) => `<button class="opt ${String(s.jars) === String(p) ? 'right' : ''}" data-act="setJars" data-arg="${i}">儲蓄 ${p[0]}%・消費 ${p[1]}%・分享 ${p[2]}%</button>`).join('')}</div>
-      <span class="xs" style="line-height:1.6">儲蓄罐的錢會直接存進「${s.goal.name}」。</span></div>
-    <div class="card"><span class="h3">每週預算</span><span class="xs">一週打算花多少，超過前會提醒你</span>
-      <div class="chips">${BUDGETS.map(b => `<button class="chip ${s.budget === b ? 'on' : ''}" data-act="setBudget" data-arg="${b}">$${b}</button>`).join('')}</div></div>`;
-  const rows = ['今天', '週一', '上週'].map(w => {
+  // 需要／想要的比例與圓餅圖已移到首頁；錢包只放收支紀錄
+  const s = state, head = '<span class="sm">收支紀錄・用載具自動記帳</span>';
+  const rows = ['今天', '週一', '上週', '本月稍早'].map(w => {
     const list = s.tx.filter(t => t.when === w);
     if (!list.length) return '';
     return `<div class="grouphd">${w}</div>` + list.map(t => {
@@ -620,27 +771,147 @@ function kidWallet(d) {
     ${d.untagged ? `<div class="banner gray">${ic('edit')}<span>你還有 ${d.untagged} 筆消費沒標記，點一下就能補標</span></div>` : ''}
     <div class="card" style="gap:0">${rows}
       <button class="ghost" style="margin-top:6px" data-act="manualAdd">${ic('plus')}手動補記（例：夜市雞排 $70）</button></div>
-    <div class="card"><span class="h3">需要 vs 想要</span>
-      <div class="track"><div class="seg blue" style="width:${d.needPct}%"></div><div class="seg" style="width:${100 - d.needPct}%;background:#E9A93A"></div></div>
-      <div class="row sb"><span class="tag need">需要 ${d.needPct}%</span><span class="tag want">想要 ${100 - d.needPct}%</span></div></div>
+    <button class="card c-green" data-act="seePie"><span class="sm t-green" style="font-weight:700">這週花在「需要」還是「想要」？</span><span class="xs">回首頁看圓餅圖 ›</span></button>
     <div class="card c-blue"><span class="h3">每週 30 秒回顧</span><span class="sm">這週最值得的一筆花費是？</span>
       ${rv ? `<div class="fb ok fade">你選了「${rv.store}・${rv.name}」，已分享給媽媽。</div>`
-        : `<div class="chips">${s.tx.filter(t => !t.income && t.when !== '上週').map(t => `<button class="chip s" data-act="review" data-arg="${t.id}">${t.name} $${t.amt}</button>`).join('')}</div>`}</div>`;
+        : `<div class="chips">${s.tx.filter(t => !t.income && isWeek(t)).map(t => `<button class="chip s" data-act="review" data-arg="${t.id}">${t.name} $${t.amt}</button>`).join('')}</div>`}</div>`;
+}
+
+// ---------- 三罐子比例調整（初次設定與錢包共用） ----------
+function jarEditor(dr) {
+  const a = state.allowance.on ? state.allowance.amount : 0, sum = dr[0] + dr[1] + dr[2];
+  const save = Math.round(a * dr[0] / 100), need = Math.round(a * dr[1] / 100), amts = [save, need, a - save - need];
+  const row = (k, i) => `<div class="jrow ${k}">
+      <span class="col"><span class="jt ${k === 'save' ? 't-blue' : k === 'need' ? 't-green' : 't-yellow'}">${JAR_INFO[k].t}</span>
+        <span class="jamt">${a && sum === 100 ? `每週 $${fmt(amts[i])}・` : ''}${JAR_INFO[k].d}</span></span>
+      <span class="step"><button class="sbtn2" aria-label="${JAR_INFO[k].t}減少" data-act="jarStep" data-arg="${i}|-5" ${dr[i] <= 0 ? 'disabled' : ''}>−</button>
+        <span class="pc">${dr[i]}%</span>
+        <button class="sbtn2" aria-label="${JAR_INFO[k].t}增加" data-act="jarStep" data-arg="${i}|5" ${dr[i] >= 100 ? 'disabled' : ''}>+</button></span></div>`;
+  return `<div class="chips">${JAR_PRESETS.map((p, i) => `<button class="chip s ${String(dr) === String(p) ? 'on' : ''}" data-act="jarPreset" data-arg="${i}">${p.join('／')}</button>`).join('')}</div>
+    <div class="col" style="gap:6px">${['save', 'need', 'want'].map(row).join('')}</div>
+    <div class="total ${sum === 100 ? 'ok' : 'no'}">${sum === 100 ? '合計 100%' : `合計 ${sum}%，要剛好 100% 才能儲存`}</div>
+    <span class="xs" style="line-height:1.6">儲蓄罐的錢會直接存進你的夢想「${state.goal.name}」。</span>`;
+}
+
+// ---------- 初次設定 ----------
+function kidSetup() {
+  const s = state;
+  if (s.setup === 'parent') return `<div class="welcome fade">
+      <div class="ring green">${ic('star')}</div>
+      <span style="font-size:22px;font-weight:800">歡迎使用 MMA Kids</span>
+      <span class="sm" style="line-height:1.7">媽媽正在 DAWHO 幫你設定零用錢<br>設定好之後，換你分配三個罐子</span>
+      <span class="banner gray" style="margin-top:6px">${ic('clock')}<span>等媽媽設定中…</span></span></div>`;
+  const a = s.allowance, dr = s.jarDraft || s.jars, sum = dr[0] + dr[1] + dr[2];
+  return `<div class="body" data-sk="kid-setup">
+    <div class="card c-green"><span class="sm t-green" style="font-weight:700">媽媽每週給你</span>
+      <span class="mid t-green">$${fmt(a.amount)}</span><span class="xs">每${a.day} ${a.time} 入帳，會照你設定的比例分進三個罐子</span></div>
+    <span class="h3" style="font-size:17px">你想怎麼分？</span>
+    ${jarEditor(dr)}
+    <button class="btn b-green" data-act="kidSetupDone" ${sum !== 100 ? 'disabled style="opacity:.5"' : ''}>開始使用</button>
+    <span class="xs" style="text-align:center">之後可以在首頁圓餅圖下方「調整三罐子比例」修改</span></div>`;
+}
+function parSetup() {
+  const s = state, a = s.allowance, m = s.match;
+  if (s.setup === 'kid') return `<div class="body" data-sk="par-setup">
+    <div class="card c-green center fade" style="padding:20px 16px">${ic('check', 'width:36px;height:36px;color:var(--greenT)')}
+      <span class="h3" style="font-size:17px">設定完成</span><span class="sm">換小安在 MMA Kids 分配三個罐子</span></div>
+    <div class="card" style="gap:0">
+      <div class="lr"><span>每週零用錢</span><b>$${fmt(a.amount)}</b></div>
+      <div class="lr"><span>轉帳時間</span><b>每${a.day} ${a.time}</b></div>
+      <div class="lr"><span>配對比例</span><b class="t-pink">1:${m.ratio}</b></div>
+      <div class="lr"><span>每週配對上限</span><b>$${fmt(m.weekCap)}</b></div>
+      <div class="lr"><span>這個夢想的配對上限</span><b>$${fmt(m.goalCap)}</b></div>
+      <div class="lr"><span>單筆上限</span><b>$${fmt(s.threshold)}</b></div>
+      <div class="lr"><span>每月上限</span><b>$${fmt(s.monthBudget)}</b></div></div>
+    <span class="banner gray">${ic('clock')}<span>等小安設定中…</span></span>
+    <button class="link" data-act="setupBack">回去修改</button></div>`;
+  const chips = (opts, cur, act, lbl = v => `$${fmt(v)}`) => `<div class="chips days">${opts.map(v => `<button class="chip ${cur === v ? 'on' : ''}" data-act="${act}" data-arg="${v}">${lbl(v)}</button>`).join('')}</div>`;
+  return `<div class="body" data-sk="par-setup">
+    <span class="sm" style="line-height:1.6">幫小安開啟 MMA Kids，先設定這幾項，之後都可以再改。</span>
+    <div class="card"><span class="h3">每週零用錢</span>${optChips('allowance', ALLOW_OPTS, false)}</div>
+    <div class="card"><span class="h3">轉帳時間</span>
+      <span class="xs">每週哪一天</span>${chips(DAY_OPTS, a.day, 'setDay', v => v.slice(1))}
+      <span class="xs">幾點</span>${optChips('time', TIME_OPTS, false)}
+      <span class="xs">每${a.day} ${a.time} 從媽媽的 DAWHO 自動轉入小安的 MMA</span></div>
+    <div class="card"><span class="h3">夢想配對比例</span>
+      ${optChips('ratio', RATIO_OPTS, false)}
+      <span class="sm t-pink" style="font-weight:700">小安存 $1，你配 $${m.ratio}</span></div>
+    <div class="card"><span class="h3">配對上限</span>
+      <span class="xs">每週最多配</span>${optChips('weekCap', WEEKCAP_OPTS, false)}
+      <span class="xs">這個夢想最多配</span>${optChips('goalCap', GOALCAP_OPTS, false)}
+      <span class="xs" style="line-height:1.6">配對款先圈存在你的帳戶，小安達標才撥入。零用錢自動存進儲蓄罐的部分不配對。</span></div>
+    ${limitCard()}
+    <button class="btn b-green" data-act="parSetupDone">完成設定，換小安設定</button></div>`;
 }
 
 // ---------- 18 歲 ----------
+// step：0 生日・升級說明 → 1 確認身分 → 2 確認資料 → 3 帳戶設定 → 4 同意條款 → 5 審核中 → 6 開戶完成
 function kidGrown() {
-  return `<div class="body" style="justify-content:center;padding:28px 20px">
-    <div class="pop" style="box-shadow:0 10px 30px rgba(31,42,55,.08)">
+  const s = state, g = s.dawho, st = g.step;
+  const top = `<div class="top"><div class="row" style="gap:10px">
+      ${st >= 1 && st <= 4 ? `<button class="iconbtn" aria-label="上一步" data-act="dawhoStep" data-arg="${st - 1}">${ic('back')}</button>` : ''}
+      <div class="col"><span class="app-n" style="color:var(--gray)">${st === 6 ? 'DAWHO' : 'MMA KIDS › 升級 DAWHO'}</span><span class="ttl">${st === 0 ? '18 歲生日快樂！' : st === 6 ? '歡迎來到 DAWHO' : '線上申請 DAWHO'}</span></div></div>
+    <div class="avatar">安</div></div>`;
+  const bar = st >= 1 && st <= 5 ? `<div class="dsteps">${DAWHO_STEPS.map((t, i) => `<div class="${i + 1 < st ? 'done' : i + 1 === st ? 'on' : ''}"><span>${i + 1 < st ? '✓' : i + 1}</span>${t}</div>`).join('')}</div>` : '';
+  const ck = (on, act, arg, label, sub = '') => `<button class="ckrow" data-act="${act}" data-arg="${arg}"><span class="check ${on ? 'on' : ''}">${on ? ic('check') : ''}</span><span class="col"><span>${label}</span>${sub ? `<span class="xs">${sub}</span>` : ''}</span></button>`;
+  let body;
+  if (st === 0) body = `
+    <div class="card center c-gray" style="padding:22px 16px">
       <div class="ring gray">${ic('cap')}</div>
-      <span style="font-size:22px;font-weight:800">18 歲生日快樂！</span>
-      <span class="sm">從 MMA Kids 畢業，升級成 DAWHO</span>
-      <div class="col" style="gap:10px;align-items:flex-start;width:100%;margin:6px 0">
-        ${['夢想紀錄、學堂成果一起帶走', `信託 18 歲給付 $${fmt(50000)} 撥入你的 DAWHO`, '從現在起，自己管理自己的錢'].map(t => `<div class="row" style="font-size:14px;text-align:left">${ic('check', 'color:var(--greenT)')}${t}</div>`).join('')}
-      </div>
-      <button class="btn b-gray" style="background:var(--gray);color:#fff;border:0" data-act="applyDawho">線上申請 DAWHO</button>
-      <span class="xs">信託商品條件需向永豐確認</span>
-    </div></div>`;
+      <span class="h3" style="font-size:18px">從 MMA Kids 畢業，升級成 DAWHO</span>
+      <span class="sm" style="line-height:1.6">滿 18 歲就是成年人，可以自己開立銀行帳戶。<br>用 MMA Kids 的資料線上申請，約 10 分鐘。</span></div>
+    <div class="card"><span class="h3">會一起帶走</span>
+      ${['夢想紀錄與目前的存款', '學堂成果與徽章', `信託 18 歲給付 $${fmt(50000)}（開戶完成後撥入）`].map(t => `<div class="row" style="font-size:14px">${ic('check', 'color:var(--greenT)')}${t}</div>`).join('')}</div>
+    <div class="card c-yellow"><span class="h3">先準備好</span>
+      ${['身分證', '第二證件（健保卡或駕照）', '本人手機（收簡訊驗證碼）'].map(t => `<div class="row" style="font-size:14px">${ic('receipt', 'width:16px;height:16px;color:var(--yellowT)')}${t}</div>`).join('')}</div>
+    <button class="btn b-green" data-act="dawhoStep" data-arg="1">開始申請</button>
+    <span class="xs" style="text-align:center">流程為示意，實際開戶條件與文件以永豐銀行公告為準</span>`;
+  else if (st === 1) body = `
+    <span class="sm">拍照上傳證件，再做一次自拍比對</span>
+    ${[['身分證正反面', 'idcard'], ['第二證件（健保卡）', 'card2'], ['自拍比對（眨眨眼）', 'selfie']].map(([t], i) => `
+      <button class="item" data-act="dawhoId" data-arg="${i}"><span class="row">${ic(i === 2 ? 'eye' : 'receipt', 'color:var(--muted)')}<span style="font-size:14px;font-weight:700">${t}</span></span>
+        ${g.id[i] ? '<span class="tag ok">完成</span>' : '<span class="tag none">點我拍攝</span>'}</button>`).join('')}
+    <button class="btn b-green" data-act="dawhoStep" data-arg="2" ${g.id.every(Boolean) ? '' : 'disabled style="opacity:.5"'}>下一步</button>`;
+  else if (st === 2) body = `
+    <span class="sm">已從 MMA Kids 自動帶入，請確認是否正確</span>
+    <div class="card" style="gap:0">
+      ${[['姓名', '王小安'], ['生日', '2014/03/12'], ['手機', '09xx-xxx-512'], ['地址', '台北市大安區（同 MMA）'], ['職業', '學生'], ['開戶目的', '儲蓄、日常消費']].map(([k, v]) => `<div class="lr"><span class="sm">${k}</span><b style="font-size:14px">${v}</b></div>`).join('')}</div>
+    <span class="xs" style="line-height:1.6">資料有誤可以在這裡修改；示範中姓名、生日為假資料。</span>
+    <button class="btn b-green" data-act="dawhoStep" data-arg="3">資料正確，下一步</button>`;
+  else if (st === 3) body = `
+    <div class="card"><span class="h3">MMA Kids 的錢要怎麼處理？</span>
+      <button class="opt ${g.fund === 'keep' ? 'right' : ''}" data-act="dawhoFund" data-arg="keep"><span class="col"><b>全部轉進 DAWHO</b><span class="xs">夢想基金變成 DAWHO 的「夢想存錢筒」子帳戶，繼續存</span></span></button>
+      <button class="opt ${g.fund === 'out' ? 'right' : ''}" data-act="dawhoFund" data-arg="out"><span class="col"><b>夢想基金領出，其餘轉入</b><span class="xs">夢想基金的錢轉成一般存款</span></span></button></div>
+    <div class="card"><span class="h3">爸媽的「親子」分頁</span>
+      <span class="xs" style="line-height:1.6">成年後，爸媽不再看得到你的消費，也不能再設定限額。</span>
+      ${ck(g.share, 'dawhoShare', '', '願意讓爸媽繼續看到我的夢想進度', '只有夢想進度，可以隨時關掉')}</div>
+    <div class="card"><span class="h3">登入設定</span>
+      <div class="lr"><span class="sm">網銀代號與密碼</span><span class="tag ok">已設定</span></div>
+      <div class="lr"><span class="sm">指紋／臉部辨識登入</span><span class="tag ok">已開啟</span></div></div>
+    <button class="btn b-green" data-act="dawhoStep" data-arg="4">下一步</button>`;
+  else if (st === 4) body = `
+    <div class="card">
+      ${ck(g.agree[0], 'dawhoAgree', 0, '我已閱讀並同意存款與數位帳戶約定條款')}
+      ${ck(g.agree[1], 'dawhoAgree', 1, '我了解：帳戶只能自己使用，借給別人可能變成詐騙共犯', '學堂「借帳戶給別人？」教過喔')}</div>
+    <div class="card c-gray"><span class="xs" style="line-height:1.6">送出後會傳簡訊驗證碼到你的手機，驗證完成就送出審核。</span></div>
+    <button class="btn b-green" data-act="dawhoSubmit" ${g.agree.every(Boolean) ? '' : 'disabled style="opacity:.5"'}>簡訊驗證並送出</button>`;
+  else if (st === 5) body = `
+    <div class="card center" style="padding:26px 16px">${ic('clock', 'width:42px;height:42px;color:var(--blue)')}
+      <span class="h3" style="font-size:18px">申請已送出，審核中</span>
+      <span class="sm" style="line-height:1.6">通常 1–3 個工作天，完成後會用簡訊和 App 通知你。<br>審核期間 MMA Kids 照常可以用。</span></div>
+    <button class="btn b-line" style="border-style:dashed" data-act="dawhoStep" data-arg="6">示範：審核通過</button>`;
+  else body = `
+    <div class="card center c-green fade" style="padding:22px 16px">${ic('check', 'width:42px;height:42px;color:var(--greenT)')}
+      <span class="h3" style="font-size:18px">DAWHO 帳戶開好了！</span>
+      <span class="sm">從現在起，自己管理自己的錢</span></div>
+    <div class="card" style="gap:0">
+      <div class="lr"><span>MMA Kids 餘額轉入</span><b>$${fmt(bal())}</b></div>
+      <div class="lr"><span>${g.fund === 'keep' ? '夢想存錢筒' : '夢想基金轉一般存款'}</span><b class="t-blue">$${fmt(s.goal.saved)}</b></div>
+      <div class="lr"><span>信託 18 歲給付</span><b class="t-purple">$${fmt(50000)}</b></div>
+      <div class="lr"><span>學堂成果</span><b>${s.lessonsDone.length} 堂課</b></div></div>
+    <div class="banner gray">${ic('users')}<span>爸媽的親子分頁已結束${g.share ? '，只會看到你的夢想進度' : ''}</span></div>
+    <button class="btn b-green" data-act="applyDawho">打開 DAWHO</button>`;
+  return `${top}<div class="body" data-sk="kid-dawho">${bar}${body}</div>`;
 }
 
 // ---------- 孩子端疊層 ----------
@@ -664,17 +935,17 @@ function kidOverlays(d) {
   if (s.giftList) return `<div class="overlay"><div class="sheet">
       <div class="row sb"><span class="h3" style="font-size:18px">我的禮物</span><button class="iconbtn" aria-label="關閉" data-act="closeGifts">${ic('x')}</button></div>
       <div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px">${s.gifts.map(id => { const g = giftOf(id); return `<div class="card c-yellow center">${ic(g.icon, 'width:28px;height:28px;color:var(--yellowT)')}<span class="h3 t-yellow">${g.t}</span></div>`; }).join('')}</div></div></div>`;
-  if (s.deposit) { const dp = s.deposit, amt = dp.amt, srcMap = {sundayLeft:'零用錢剩下的', gift:'紅包', family:'親友給的', other:'其他'};
+  if (s.deposit) { const dp = s.deposit, amt = dp.amt, srcMap = {sundayLeft:'罐子剩下的', gift:'紅包', family:'親友給的', other:'其他'};
     const mk = dp.src === 'family' ? 'gift' : dp.src === 'other' ? null : dp.src;
     const mom = matchFor(amt, mk);
     return `<div class="overlay"><div class="sheet">
       <div class="row sb"><span class="h3" style="font-size:18px">存一筆進${s.goal.name}</span><button class="iconbtn" aria-label="關閉" data-act="closeDeposit">${ic('x')}</button></div>
-      <span class="xs">從可以用的錢轉入（目前 $${fmt(s.balance)}）</span>
-      <div class="chips">${[50, 100, 200, 500].map(a => `<button class="chip ${amt === a ? 'on' : ''}" data-act="depAmt" data-arg="${a}" ${a > s.balance ? 'disabled style="opacity:.4"' : ''}>$${a}</button>`).join('')}</div>
+      <span class="xs">先從想要罐轉入，不夠再用需要罐（想要 $${fmt(s.want)}・需要 $${fmt(s.need)}）</span>
+      <div class="chips">${[50, 100, 200, 500].map(a => `<button class="chip ${amt === a ? 'on' : ''}" data-act="depAmt" data-arg="${a}" ${a > bal() ? 'disabled style="opacity:.4"' : ''}>$${a}</button>`).join('')}</div>
       <span class="xs">這筆錢是？（選填）</span>
       <div class="chips">${Object.entries(srcMap).map(([k, v]) => `<button class="chip s ${dp.src === k ? 'on' : ''}" data-act="depSrc" data-arg="${k}">${v}</button>`).join('')}</div>
       <div class="card c-blue" style="padding:10px 14px"><span class="sm t-blue" style="font-weight:700">進度 ${d.progress}% → ${pct(s.goal.saved + amt, d.held + mom)}%${mom ? `　媽媽陪你存 +$${mom}` : ''}</span></div>
-      <button class="btn b-blue" data-act="doDeposit" ${amt > s.balance ? 'disabled style="opacity:.5"' : ''}>存進去</button></div></div>`; }
+      <button class="btn b-blue" data-act="doDeposit" ${amt > bal() ? 'disabled style="opacity:.5"' : ''}>存進去</button></div></div>`; }
   if (s.doneSheet) return `<div class="overlay"><div class="sheet">
       <div class="row sb"><span class="h3" style="font-size:18px">我做完了</span><button class="iconbtn" aria-label="關閉" data-act="closeDone">${ic('x')}</button></div>
       <span class="xs">選一個任務</span>
@@ -684,7 +955,7 @@ function kidOverlays(d) {
       <button class="btn b-yellow" data-act="sendDone" ${s.doneSheet.task ? '' : 'disabled style="opacity:.5"'}>通知爸媽</button></div></div>`;
   if (s.approvalReq) return `<div class="overlay"><div class="sheet">
       <span class="h3" style="font-size:18px">這筆需要爸媽同意</span>
-      <div class="card c-gray"><span class="sm">提前領出${s.goal.name}</span><span class="mid">$300</span><span class="xs">從夢想基金領回可以用的錢</span></div>
+      <div class="card c-gray"><span class="sm">提前領出${s.goal.name}</span><span class="mid">$300</span><span class="xs">從夢想基金領回想要罐</span></div>
       <span class="xs">想說的話（選填）</span>
       <div class="chips">${['球鞋有特價，想先買便宜的', '想先買文具'].map((r, i) => `<button class="chip s ${s.approvalReq.reason === i ? 'on' : ''}" data-act="wReason" data-arg="${i}">${r}</button>`).join('')}</div>
       <button class="btn b-green" data-act="sendApproval" data-arg="withdraw">送出給爸媽</button>
@@ -712,12 +983,50 @@ function kidOverlays(d) {
           <button class="btn b-line" data-act="checkTell">告訴爸媽</button><button class="btn b-line" data-act="call165">打 165</button></div>
         <span class="xs" style="line-height:1.5">銀行看不到你的 LINE、IG 訊息，這裡只檢查你主動貼上的內容。</span>` : ''}
     </div></div>`; }
+  if (s.susp) { const u = s.susp;
+    return `<div class="overlay"><div class="sheet">
+      <div class="row sb"><span class="h3" style="font-size:18px">可疑詐騙付款</span><button class="iconbtn" aria-label="關閉" data-act="closeSusp">${ic('x')}</button></div>
+      ${u.sent ? `<div class="fb ok">已通知媽媽！付款碼先鎖住，別人拿到也不能用。你做得很對，說出來就是最好的保護。</div>
+          <div class="hotline">${ic('phoneCall')}<span class="sm">165 反詐騙諮詢專線</span></div>
+          <button class="btn b-line" data-act="closeSusp">好</button>`
+        : `<span class="sm">發生什麼事？選一個最接近的</span>
+          <div class="col" style="gap:6px">${SUSP_REASONS.map((r, i) => `<button class="opt ${u.reason === i ? 'right' : ''}" data-act="suspReason" data-arg="${i}">${r}</button>`).join('')}</div>
+          <div class="banner warn">${ic('shieldAlert')}<span>不確定也沒關係，先通知爸媽。不要再把付款碼給別人看。</span></div>
+          <button class="btn b-pink" data-act="sendSusp" ${u.reason === null ? 'disabled style="opacity:.5"' : ''}>通知媽媽，先鎖住付款碼</button>`}
+    </div></div>`; }
+  if (s.jarSheet) { const dr = s.jarDraft || s.jars, same = String(dr) === String(s.jars), sum = dr[0] + dr[1] + dr[2];
+    return `<div class="overlay"><div class="sheet">
+      <div class="row sb"><span class="h3" style="font-size:18px">調整三罐子比例</span><button class="iconbtn" aria-label="關閉" data-act="closeJars">${ic('x')}</button></div>
+      <span class="xs">零用錢入帳時自動分配，下次入帳開始套用</span>
+      ${jarEditor(dr)}
+      <button class="btn b-green" data-act="saveJars" ${same || sum !== 100 ? 'disabled style="opacity:.5"' : ''}>儲存比例</button></div></div>`; }
   if (s.scene) return kidScene();
   return '';
 }
 
 function kidScene() {
   const sc = state.scene;
+  if (sc.type === 'drill') {
+    const x = drillOf(sc.id);
+    if (sc.step === 0) {
+      const ok = `<button class="btn b-line" data-act="drillPick" data-arg="ok">${x.ok}</button>`;
+      const bad = `<button class="btn b-line" data-act="drillPick" data-arg="bad">${x.bad}</button>`;
+      return `<div class="overlay mid"><div class="pop left">
+        <div class="row sb"><span class="tag task">情境演練・${x.tag}</span><button class="iconbtn" aria-label="離開演練" data-act="drillExit">${ic('x')}</button></div>
+        <span class="xs" style="font-weight:700">${x.from}</span>
+        <div class="msg">${x.msg}</div>
+        <span class="h3">你會怎麼做？</span>
+        ${x.badFirst ? bad + ok : ok + bad}</div></div>`;
+    }
+    const good = sc.step === 'ok';
+    return `<div class="overlay mid"><div class="pop left">
+      <div class="row">${ic(good ? 'check' : 'shieldAlert', `width:26px;height:26px;color:${good ? 'var(--greenT)' : '#8A4B00'}`)}<span class="h3" style="font-size:17px">${good ? '做得好！' : '小心，這是詐騙！'}</span></div>
+      <span style="font-size:14px;line-height:1.7">${x.why}</span>
+      <div class="card c-blue" style="padding:10px 12px"><span class="sm" style="line-height:1.6">${x.real}</span></div>
+      <div class="hotline">${ic('phoneCall')}<span class="sm">不確定時，問爸媽或打 <b>165</b></span></div>
+      ${good ? `<button class="btn b-green" data-act="drillDone">${ic('check')}完成演練，回到學堂</button>`
+        : `<button class="btn b-green" data-act="drillRetry">再練一次</button><button class="btn b-line" data-act="drillExit">先回到學堂</button>`}</div></div>`;
+  }
   if (sc.type === 'mule') {
     if (sc.step === 0) return `<div class="overlay mid"><div class="pop left">
       <span class="xs" style="font-weight:700">網友傳來訊息</span>
@@ -743,6 +1052,11 @@ function kidScene() {
 const parTitles = {overview:'小安的 MMA Kids', allowance:'零用錢', match:'配對設定', task:'任務', safety:'安全', trust:'小安成長信託', report:'任務回報', newTask:'新增任務'};
 function viewParent(d) {
   const s = state, v = s.parView;
+  if (s.setup) return `<div class="ph"><div class="scr">
+    <div class="top"><div class="col"><span class="app-n p">DAWHO › 親子 › 初次設定</span><span class="ttl">${s.setup === 'kid' ? '小安的 MMA Kids' : '設定零用錢與配對'}</span></div><div class="avatar p">媽</div></div>
+    ${parSetup()}
+    ${s.parToast ? `<div class="toast" role="status">${ic('bell')}<span>${esc(s.parToast)}</span></div>` : ''}
+  </div></div>`;
   const views = {overview:parOverview, allowance:parAllowance, match:parMatch, task:parTask, safety:parSafety, trust:parTrust, report:parReport, newTask:parNewTask};
   const tabOf = {trust:'overview', report:'task', newTask:'task'};
   const cur = tabOf[v] || v;
@@ -754,7 +1068,7 @@ function viewParent(d) {
       <div class="col"><span class="app-n p">DAWHO › 親子${v === 'trust' ? ' › 信託' : ''}</span><span class="ttl ${v === 'trust' ? 't-purple' : ''}">${parTitles[v]}</span></div></div>
       <div class="avatar p">媽</div></div>
     <div class="body" data-sk="par-${v}">${views[v](d)}</div>
-    <div class="tabs p">${tab('overview', '總覽', 'home')}${tab('allowance', '零用錢', 'coins')}${tab('match', '配對', 'heart')}${tab('task', '任務', 'gift')}${tab('safety', '安全', 'shield')}</div>
+    <div class="tabs p">${tab('overview', '總覽', 'home')}${s.grown ? '' : tab('allowance', '零用錢', 'coins') + tab('match', '配對', 'heart') + tab('task', '任務', 'gift') + tab('safety', '安全', 'shield')}</div>
     ${parOverlays()}
     ${s.parToast ? `<div class="toast" role="status">${ic('bell')}<span>${esc(s.parToast)}</span></div>` : ''}
   </div></div>`;
@@ -762,8 +1076,17 @@ function viewParent(d) {
 
 function todoList(d) {
   const s = state, out = [];
+  const two = (b1, b2) => `<div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px">${b1}${b2}</div>`;
+  const sbtn = (cls, act, arg, label) => `<button class="btn ${cls}" style="min-height:40px;font-size:13px" data-act="${act}" data-arg="${arg}">${label}</button>`;
+  if (s.cardFrozen) out.push(`<div class="todo blue"><span class="ttl2">${ic('lock', 'width:16px;height:16px;display:inline;vertical-align:-3px')} 小安的卡片暫停中</span>
+    <span class="sm" style="line-height:1.6">已通報永豐並補發新卡（約 7 個工作天）。手機付款碼照常可用。</span>
+    ${sbtn('b-line', 'cardRestore', '', '新卡已收到，恢復使用')}</div>`);
   s.alerts.forEach(a => out.push(`<div class="todo red"><span class="ttl2" style="color:#8E2A33">${ic('shieldAlert', 'width:16px;height:16px;display:inline;vertical-align:-3px')} ${a.title}</span><span class="sm" style="line-height:1.6;color:#3F4753">${a.text}</span>
-    ${a.kind === 'help' ? `<div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"><button class="btn b-pink" style="min-height:40px;font-size:13px" data-act="callKid">打電話給小安</button><button class="btn b-line" style="min-height:40px;font-size:13px" data-act="ackAlert" data-arg="${a.id}">聯繫永豐客服</button></div>${s.frozen ? '<button class="link" style="align-self:flex-start;padding:0" data-act="unfreeze">解除轉帳暫停</button>' : ''}`
+    ${a.kind === 'card' ? `${two(sbtn('b-line', 'cardMine', a.id, '是小安本人刷的'), sbtn('b-pink', 'cardNotMine', a.id, '不是，停卡通報'))}
+        <span class="xs">這筆已被擋下，沒有扣款。停卡後會補發新卡，手機付款碼照常可用。</span>`
+    : a.kind === 'susp' ? `${two(sbtn('b-pink', 'callKid', '', '打電話給小安'), sbtn('b-line', 'suspReport', a.id, '通報永豐客服'))}
+        ${s.payLocked ? `<button class="link" style="align-self:flex-start;padding:0" data-act="suspSafe" data-arg="${a.id}">確認安全，解除付款碼鎖定</button>` : ''}`
+    : a.kind === 'help' ? `<div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"><button class="btn b-pink" style="min-height:40px;font-size:13px" data-act="callKid">打電話給小安</button><button class="btn b-line" style="min-height:40px;font-size:13px" data-act="ackAlert" data-arg="${a.id}">聯繫永豐客服</button></div>${s.frozen ? '<button class="link" style="align-self:flex-start;padding:0" data-act="unfreeze">解除轉帳暫停</button>' : ''}`
       : `<button class="btn b-line" style="min-height:40px;font-size:13px" data-act="ackAlert" data-arg="${a.id}">我知道了</button>`}</div>`));
   if (s.heldIncoming) out.push(`<div class="todo blue"><span class="ttl2">陌生帳戶轉入 $${fmt(s.heldIncoming.amt)}，已先保留</span><span class="sm">對方不在家人名單內。確認是認識的人才會入帳。</span>
     <div class="grid2" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px"><button class="btn b-line" style="min-height:40px;font-size:13px" data-act="heldOk">確認是認識的人</button><button class="btn b-pink" style="min-height:40px;font-size:13px" data-act="heldReturn">退回並通報</button></div></div>`);
@@ -790,11 +1113,22 @@ function parOverview(d) {
   const s = state, todo = todoList(d);
   const rv = s.tx.find(t => t.id === s.reviewPick);
   const noOver = taskOf('noOver');
+  if (s.grown) { const st = s.dawho.step, done = st === 6;
+    const steps = [['小安開始申請 DAWHO', st >= 1], ['身分驗證與資料確認', st >= 3], ['送出審核', st >= 5], ['開戶完成', done]];
+    return `
+    <div class="card c-purple"><span class="h3 t-purple">${ic('cap', 'width:16px;height:16px;display:inline;vertical-align:-3px')} 小安 18 歲了</span>
+      <span class="sm" style="line-height:1.6">小安成年後由本人線上申請 DAWHO，不需要你陪同或簽名。</span>
+      <div class="col" style="gap:6px;margin-top:4px">${steps.map(([t, ok]) => `<div class="row" style="font-size:14px"><span class="check ${ok ? 'on' : ''}" style="width:20px;height:20px">${ok ? ic('check') : ''}</span>${t}</div>`).join('')}</div></div>
+    <div class="card" style="gap:0"><span class="h3" style="margin-bottom:4px">開戶完成後會怎樣</span>
+      ${[['信託 18 歲給付', `$${fmt(50000)} 撥入小安的 DAWHO`], ['親子分頁', done ? (s.dawho.share ? '已結束，只看得到夢想進度' : '已結束') : '開戶完成後結束'], ['零用錢自動轉帳', '可改轉到小安的 DAWHO，或停止'], ['消費明細與限額', '不再顯示、不能設定']].map(([k, v]) => `<div class="lr"><span class="sm">${k}</span><b style="font-size:13px;text-align:right">${v}</b></div>`).join('')}</div>
+    ${done ? '' : '<button class="btn b-purple" data-act="cheer">傳一句祝福給小安</button>'}
+    <span class="xs" style="text-align:center">流程為示意，實際以永豐銀行公告為準</span>`;
+  }
   return `
     ${todo.length ? `<div class="need-box"><span class="h3">需要你處理（${todo.length}）</span>${todo.join('')}</div>` : ''}
     <div class="card"><span class="h3">小安這週</span>
       <div class="stat3">
-        <div class="statbox" style="background:var(--greenBg)"><span class="xs">可以用的錢</span><b class="t-green">$${fmt(s.balance)}</b></div>
+        <div class="statbox" style="background:var(--greenBg)"><span class="xs">可以用的錢</span><b class="t-green">$${fmt(bal())}</b><span class="xs">需要 $${fmt(s.need)}・想要 $${fmt(s.want)}</span></div>
         <div class="statbox" style="background:var(--blueBg)"><span class="xs">${s.goal.name}</span><b class="t-blue">${d.progress}%</b></div>
         <div class="statbox" style="background:var(--pinkBg)"><span class="xs">選「存起來」</span><b class="t-pink">${s.saveCount} 次</b></div>
         <div class="statbox" style="background:var(--pinkBg)"><span class="xs">本週配對保留</span><b class="t-pink">$${fmt(s.match.heldThisWeek)}</b></div>
@@ -811,35 +1145,39 @@ function parAllowance() {
   return `
     <div class="card"><div class="row sb"><span class="h3">固定給零用錢</span><button class="sw ${a.on ? 'on' : ''}" aria-pressed="${a.on}" aria-label="固定給零用錢" data-act="tAllowance"><span class="knob"></span></button></div>
       ${a.on ? `<span class="xs">每週金額</span>
-        <div class="chips">${[200, 300, 500].map(v => `<button class="chip ${a.amount === v ? 'on' : ''}" data-act="setAllow" data-arg="${v}">$${v}</button>`).join('')}</div>
-        <div class="lr"><span class="sm">轉帳時間</span><span class="sm">每週一 07:00</span></div>
+        ${optChips('allowance', ALLOW_OPTS, false)}
+        <span class="xs">轉帳時間：每${a.day} ${a.time}</span>
+        <div class="chips days">${DAY_OPTS.map(v => `<button class="chip s ${a.day === v ? 'on' : ''}" data-act="setDay" data-arg="${v}">${v.slice(1)}</button>`).join('')}</div>
+        ${optChips('time', TIME_OPTS)}
         <div class="lr"><span class="sm">扣款帳戶</span><span class="sm">媽媽的 DAWHO</span></div>
+        ${(p => `<div class="card c-gray" style="padding:10px 12px"><span class="xs" style="font-weight:700">小安的三罐子（比例由小安設定）</span>
+          <span class="sm">儲蓄 $${fmt(p.save)}・需要 $${fmt(p.need)}・想要 $${fmt(p.want)}</span></div>`)(portions())}
         ${a.paused ? `<div class="banner gray">${ic('pause')}<span>零用錢暫停中（${a.pauseFor}）</span></div><button class="btn b-line" data-act="resumeAllow">恢復零用錢</button>`
           : `<button class="btn b-green" data-act="payNow">提前撥款</button>
              <span class="xs">暫停零用錢</span><div class="chips">${['2 週', '1 個月', '直到我恢復'].map(p => `<button class="chip s" data-act="pauseAllow" data-arg="${p}">${p}</button>`).join('')}</div>`}`
-        : '<span class="sm" style="line-height:1.6">不自動撥款。小安仍可用紅包、存款使用夢想基金，首頁不顯示「本週還能花」。</span>'}</div>
+        : '<span class="sm" style="line-height:1.6">不自動撥款。小安仍可用紅包、存款使用夢想基金。</span>'}</div>
     <div class="card"><span class="h3">家人名單</span><span class="xs" style="line-height:1.6">名單內的轉入（例如外婆的紅包）直接入帳，不會被「陌生入帳先保留」擋下。</span>
       ${s.family.map(f => `<div class="lr"><span class="row">${ic('users', 'width:16px;height:16px;color:var(--muted)')}${f}</span><span class="tag ok">已加入</span></div>`).join('')}</div>`;
 }
 
 function parMatch(d) {
   const s = state, m = s.match;
-  const ratios = [[1, '1:1'], [0.5, '1:0.5'], [2, '1:2']];
   const ck = (k, label) => `<button class="ckrow" data-act="tSource" data-arg="${k}"><span class="check ${m.sources[k] ? 'on' : ''}">${m.sources[k] ? ic('check') : ''}</span>${label}</button>`;
   return `
     <span class="sm">夢想：${s.goal.name} $${fmt(s.goal.target)}</span>
     ${m.paused ? `<div class="banner gray">${ic('pause')}<span>配對暫停中・已保留的 $${fmt(heldAll())} ${heldAll() ? '達標時照樣給小安' : '已解除'}</span></div>` : ''}
     <div class="card"><span class="h3">配對比例（你決定）</span>
-      <div class="seg3">${ratios.map(([r, l]) => `<button class="chip ${m.ratio === r ? 'on' : ''}" data-act="setRatio" data-arg="${r}">${l}</button>`).join('')}<button class="chip" data-act="customRatio">自訂</button></div>
+      ${optChips('ratio', RATIO_OPTS, false)}
       <span class="sm t-pink" style="font-weight:700">小安存 $1，你配 $${m.ratio}</span>
       <span class="xs">儲存後，比例在這個夢想期間不變</span></div>
-    <div class="card" style="gap:0">
-      <div class="lr"><span>每週配對上限</span><b>$${m.weekCap}</b></div>
-      <div class="lr"><span>這個夢想的配對上限</span><b>$${m.goalCap}</b></div>
-      <div class="lr"><span>本週已保留</span><b class="t-pink">$${m.heldThisWeek}${m.heldThisWeek >= m.weekCap ? '（已達上限）' : ''}</b></div>
+    <div class="card"><span class="h3">配對上限</span>
+      <span class="xs">每週最多配</span>${optChips('weekCap', WEEKCAP_OPTS)}
+      <span class="xs">這個夢想最多配</span>${optChips('goalCap', GOALCAP_OPTS)}
+      <div class="lr"><span>本週已保留</span><b class="t-pink">$${fmt(m.heldThisWeek)}${m.heldThisWeek >= m.weekCap ? '（已達上限）' : ''}</b></div>
       <div class="lr"><span>累計保留（圈存在你的帳戶）</span><b class="t-pink">$${fmt(heldAll())}</b></div></div>
     <div class="card"><span class="h3">哪些存款可以配對</span>
-      ${ck('saveAtPay', '付款前選「存起來」')}${ck('sundayLeft', '把零用錢剩下的存進夢想')}${ck('gift', '紅包、親友贈與')}</div>
+      ${ck('saveAtPay', '付款前選「存起來」')}${ck('sundayLeft', '把需要、想要罐剩下的存進夢想')}${ck('gift', '紅包、親友贈與')}
+      <span class="xs">零用錢自動存進儲蓄罐的部分不配對</span></div>
     <button class="btn b-pink" data-act="saveMatch">儲存配對規則</button>
     ${m.paused ? '<button class="btn b-line" data-act="resumeMatch">恢復配對</button>' : '<button class="btn b-line" data-act="openPause">暫停配對</button>'}
     <span class="xs" style="line-height:1.6">配對款先圈存在你自己的帳戶，達標當週結算後一次撥入小安的 MMA；上限到了就不再配對。</span>`;
@@ -897,9 +1235,8 @@ function parSafety() {
     <div class="card"><span class="h3">查看程度</span><span class="xs">依小安 ${s.age} 歲自動預設，也可以手動調整</span>
       <div class="col" style="gap:6px">${Object.entries(LEVELS).map(([k, l]) => `<button class="opt ${s.viewLevel === k ? 'right' : ''}" data-act="setLevel" data-arg="${k}">${l.t}${DEFAULT_LEVEL(s.age) === k ? '<span class="xs" style="margin-left:auto">預設</span>' : ''}</button>`).join('')}</div>
       <span class="xs" style="line-height:1.5">小安的首頁會顯示「媽媽可以看到：${LEVELS[s.viewLevel].kid}」。</span></div>
-    <div class="card" style="gap:0"><span class="h3" style="margin-bottom:4px">消費限額與需要我同意</span>
-      <div class="lr"><span>單日消費上限</span><b>$${fmt(s.dayLimit)}</b></div>
-      <div class="lr"><span>單筆超過要我同意</span><b>$${fmt(s.threshold)}</b></div>
+    ${limitCard()}
+    <div class="card" style="gap:0"><span class="h3" style="margin-bottom:4px">需要我同意</span>
       <div class="lr"><span>新增收款人</span>${sw(s.newPayee, 'tPayee', '新增收款人需要同意')}</div>
       <div class="lr"><span>夢想基金提前領出</span>${sw(true, '', '', true)}</div></div>
     <div class="card" style="gap:0"><span class="h3" style="margin-bottom:4px">封鎖消費類別</span>
@@ -909,13 +1246,55 @@ function parSafety() {
       ${['陌生入帳先保留', '短時間大量轉出', '新增陌生收款人', '交易當下提醒'].map(l => `<div class="lr"><span>${l}</span>${sw(true, '', '', true)}</div>`).join('')}</div>`;
 }
 
+// ---------- 家長設定：預設選項＋「自訂」（初次設定、零用錢、配對、安全共用） ----------
+// kind：money 金額／ratio 配對比例（1:x）／time 時間（HH:MM）
+const FIELDS = {
+  allowance:   {kind:'money', lo:50,  hi:5000,  step:50,  name:'每週零用錢', get:() => state.allowance.amount, set:v => { state.allowance.amount = v; }},
+  time:        {kind:'time',                                name:'轉帳時間',   get:() => state.allowance.time,   set:v => { state.allowance.time = v; }},
+  ratio:       {kind:'ratio', lo:0.1, hi:5,     step:0.1, name:'配對比例',   get:() => state.match.ratio,      set:v => { state.match.ratio = v; }},
+  weekCap:     {kind:'money', lo:10,  hi:2000,  step:10,  name:'每週配對上限', get:() => state.match.weekCap,  set:v => { state.match.weekCap = v; }},
+  goalCap:     {kind:'money', lo:50,  hi:20000, step:50,  name:'這個夢想的配對上限', get:() => state.match.goalCap, set:v => { state.match.goalCap = v; }},
+  monthBudget: {kind:'money', lo:100, hi:50000, step:100, name:'每月上限',   get:() => state.monthBudget,      set:v => { state.monthBudget = v; }, tell:true},
+  threshold:   {kind:'money', lo:50,  hi:20000, step:50,  name:'單筆上限',   get:() => state.threshold,        set:v => { state.threshold = v; }, tell:true}
+};
+const fieldLabel = (f, v) => f.kind === 'money' ? `$${fmt(v)}` : f.kind === 'ratio' ? `1:${v}` : v;
+function optChips(key, opts, small = true) {
+  const s = state, f = FIELDS[key], cur = f.get(), e = s.limitEdit, editing = e && e.key === key;
+  const custom = !opts.includes(cur), cls = `chip${small ? ' s' : ''}`;
+  const range = f.kind === 'time' ? '輸入 00:00～23:59' : `可設定 ${fieldLabel(f, f.lo)}～${fieldLabel(f, f.hi)}`;
+  const input = f.kind === 'time'
+    ? `<input id="limit-input" type="time" value="${esc(e && editing ? e.val : '')}">`
+    : `<input id="limit-input" type="number" inputmode="decimal" min="${f.lo}" max="${f.hi}" step="${f.step}" value="${esc(e && editing ? e.val : '')}" placeholder="${f.kind === 'ratio' ? '例如 1.5' : '輸入金額'}">`;
+  return `<div class="chips">${opts.map(v => `<button class="${cls} ${cur === v && !editing ? 'on' : ''}" data-act="pickField" data-arg="${key}|${v}">${fieldLabel(f, v)}</button>`).join('')}
+      <button class="${cls} ${custom || editing ? 'on' : ''}" data-act="limitCustom" data-arg="${key}">${custom && !editing ? `自訂 ${fieldLabel(f, cur)}` : '自訂'}</button></div>
+    ${editing ? `<div class="row" style="gap:6px">
+        <label class="sr" for="limit-input">自訂${f.name}</label>
+        <span class="limin">${f.kind === 'money' ? '<span>$</span>' : f.kind === 'ratio' ? '<span>1:</span>' : ''}${input}</span>
+        <button class="btn b-green" style="width:auto;min-height:38px;font-size:13px;padding:0 14px" data-act="limitSave">確定</button>
+        <button class="btn b-line" style="width:auto;min-height:38px;font-size:13px;padding:0 12px" data-act="limitCancel">取消</button></div>
+      <span class="xs ${e.err ? 't-pink' : ''}">${e.err || range}</span>` : ''}`;
+}
+
+// 防亂花錢設定（安全分頁、初次設定共用；兩個金額都由家長調整）
+function limitCard() {
+  const s = state, used = Math.min(100, s.monthSpent / s.monthBudget * 100);
+  const chips = (opts, cur, key) => optChips(key, opts);
+  const row = (icon, color, t, sub) => `<div class="row" style="margin-top:6px">${ic(icon, `width:16px;height:16px;color:${color}`)}<span class="col"><span style="font-size:14px;font-weight:700">${t}</span><span class="xs">${sub}</span></span></div>`;
+  return `<div class="card"><span class="h3">防亂花錢設定</span>
+    <span class="xs" style="line-height:1.5">超過任一個上限，你會收到通知，按同意後才會付款</span>
+    ${row('wallet', 'var(--pink)', '每月上限', '這個月累計花費超過上限')}${chips(BUDGET_OPTS, s.monthBudget, 'monthBudget')}
+    ${s.setup ? '' : `<div class="track thin"><div class="seg ${used >= 80 ? 'pink' : 'green'}" style="width:${used.toFixed(1)}%"></div></div>
+      <span class="xs">本月已花 $${fmt(s.monthSpent)}・還剩 $${fmt(Math.max(0, s.monthBudget - s.monthSpent))}</span>`}
+    ${row('coins', 'var(--yellowT)', '單筆上限', '一次刷卡超過這個金額')}${chips(SINGLE_OPTS, s.threshold, 'threshold')}</div>`;
+}
+
 function parTrust() {
   return `
     <div class="trustbig"><span style="font-size:12px;color:#E5DDF3">信託資產現值</span><span class="big">$${fmt(300000)}</span><span style="font-size:13px;color:#E5DDF3">每月投入 $3,000</span></div>
     <div class="card" style="gap:0"><span class="h3" style="margin-bottom:4px">預定給付</span>
       <div class="lr"><span class="col"><b>15 歲｜2029/3</b><span class="xs">撥入小安的 MMA</span></span><b class="t-purple">$${fmt(20000)}</b></div>
       <div class="lr"><span class="col"><b>18 歲｜2032/3</b><span class="xs">撥入小安的 DAWHO</span></span><b class="t-purple">$${fmt(50000)}</b></div></div>
-    <span class="xs" style="line-height:1.6">15 歲給付撥入 MMA 後，大額使用（$1,000 以上）仍需要你同意。</span>
+    <span class="xs" style="line-height:1.6">15 歲給付撥入 MMA 後，超過你設定的單筆上限（目前 $${fmt(state.threshold)}）或每月上限，仍需要你同意。</span>
     <button class="btn b-purple" data-act="trustDetail">查看信託明細</button>
     <span class="xs" style="text-align:center">信託商品條件需向永豐確認</span>`;
 }
@@ -946,14 +1325,12 @@ function goCh(id) {
   set(patch);
 }
 function creditAllowance(label) {
-  const s = state, a = s.allowance.amount;
-  const save = Math.round(a * s.jars[0] / 100), share = Math.round(a * s.jars[2] / 100), spend = a - save - share;
-  s.balance += spend; s.goal.saved += save; s.shareJar += share; s.weekSpent = 0;
-  const mom = matchFor(save, 'sundayLeft');
-  s.match.heldThisWeek += mom;
+  const s = state, a = s.allowance.amount, p = portions();
+  // 儲蓄份自動存進夢想，不產生配對（配對只給孩子主動存的錢）
+  s.goal.saved += p.save; s.need += p.need; s.want += p.want;
   s.tx.unshift({id:++seq, when:'今天', store:'家長零用錢', name:'零用錢入帳', amt:a, cat:'收入', income:true});
-  addFeed('save', `${label}零用錢 $${a}（儲蓄 $${save}・消費 $${spend}・分享 $${share}）`);
-  toast('kid', `零用錢 $${a} 入帳：$${save} 存進${s.goal.name}${mom ? `，媽媽陪你存 +$${mom}` : ''}`);
+  addFeed('save', `${label}零用錢 $${fmt(a)}（儲蓄 $${p.save}・需要 $${p.need}・想要 $${p.want}）`);
+  toast('kid', `零用錢 $${fmt(a)} 入帳：儲蓄 $${p.save}・需要 $${p.need}・想要 $${p.want}`);
   toast('par', `已撥款 $${a} 給小安`);
   checkGoal(); render();
 }
@@ -961,9 +1338,25 @@ function addApproval(type, title, amt, reason, who = 'kid', extra = {}) {
   state.approvals.unshift({id:++seq, type, title, amt, reason, who, status:'pending', ...extra});
   toast('par', `小安送出一筆需要你同意的請求`);
 }
+// 套用一個家長設定；初次設定以外，重要的設定會同步通知小安
+function applyField(k, v) {
+  const s = state, f = FIELDS[k];
+  f.set(v); s.limitEdit = null;
+  if (s.setup) { render(); return; }
+  addFeed('security', `媽媽把${f.name}改為 ${fieldLabel(f, v)}`);
+  if (f.tell || k === 'allowance') toast('kid', `媽媽調整了${f.name}：${fieldLabel(f, v)}`);
+  else toast('par', `${f.name}已改為 ${fieldLabel(f, v)}`);
+}
+// 回傳這筆超過了哪些家長設定的上限（空陣列＝沒超過）
+function overLimits(m) {
+  const s = state, out = [];
+  if (m.amt > s.threshold) out.push(`超過單筆上限 $${fmt(s.threshold)}`);
+  if (s.monthSpent + m.amt > s.monthBudget) out.push(`會超過每月上限 $${fmt(s.monthBudget)}（這個月已花 $${fmt(s.monthSpent)}）`);
+  return out;
+}
 function doPay(m) {
   const s = state;
-  s.balance -= m.amt; s.weekSpent += m.amt;
+  take(m.amt, m.jar || 'want'); s.monthSpent += m.amt;
   const t = {id:++seq, when:'今天', store:m.store, name:m.name, amt:m.amt, cat:m.cat, tag:null, src:m.items ? 'carrier' : 'card', items:m.items};
   s.tx.unshift(t); s.pay = {...s.pay, step:'tag', txId:t.id};
   addFeed('spend', '', {store:m.store, amt:m.amt, items:m.items, tag:null, txId:t.id});
@@ -975,23 +1368,25 @@ const ACT = {
   nextCh() { const i = CH.findIndex(c => c.id === state.ch); if (i < CH.length - 1) goCh(CH[i + 1].id); },
   reset() { Object.values(timers).forEach(clearTimeout); state = initState(); render(); },
   kv(v) { set({kidView:v, pay:null, lesson:null, quizPick:null, scamQuiz:null, openTx:null}); },
-  pv(v) { set({parView:v}); },
+  pv(v) { set({parView:v, limitEdit:null}); },
 
   // 零用錢與紅包
   autoAllowance() { if (state.allowance.on && !state.allowance.paused) creditAllowance('自動撥款：'); },
   payNow() { creditAllowance('提前撥款：'); },
   tAllowance() { const a = state.allowance; a.on = !a.on; a.paused = false; toast('kid', a.on ? '媽媽開啟了固定零用錢' : '媽媽調整了零用錢設定'); },
   setAllow(v) { state.allowance.amount = Number(v); render(); },
+  setDay(v) { state.allowance.day = v; render(); },
+  setTime(v) { state.allowance.time = v; render(); },
   pauseAllow(p) { Object.assign(state.allowance, {paused:true, pauseFor:p}); toast('par', `零用錢暫停（${p}）`); },
   resumeAllow() { Object.assign(state.allowance, {paused:false, pauseFor:''}); toast('par', '零用錢已恢復'); },
   grandma() {
-    const s = state; s.balance += 2000;
+    const s = state; s.want += 2000;   // 紅包先進想要罐，再問要不要存一部分到夢想
     s.tx.unshift({id:++seq, when:'今天', store:'外婆', name:'紅包', amt:2000, cat:'收入', income:true});
     s.bigIn = {amt:2000, from:'外婆'}; s.kidView = 'home';
     addFeed('save', '外婆轉入紅包 $2,000（家人名單，直接入帳）');
     toast('par', '外婆轉入 $2,000 給小安（家人名單）');
   },
-  bigSave(v) { const s = state, a = Number(v); s.balance -= a; s.goal.saved += a; const mom = matchFor(a, 'gift'); s.match.heldThisWeek += mom; s.bigIn = null;
+  bigSave(v) { const s = state, a = Number(v); take(a, 'want'); s.goal.saved += a; const mom = matchFor(a, 'gift'); s.match.heldThisWeek += mom; s.bigIn = null;
     addFeed('save', `小安把紅包 $${a} 存進${s.goal.name}`); toast('kid', `存進${s.goal.name} $${a}${mom ? `，媽媽陪你存 $${mom}` : ''}`); checkGoal(); render(); },
   bigSkip() { set({bigIn:null}); },
 
@@ -1000,21 +1395,30 @@ const ACT = {
   scan(id) {
     const s = state, m = MERCHANTS.find(x => x.id === id);
     s.kidView = 'pay'; s.scene = null;
+    if (s.payLocked) { s.pay = {step:'code', m:null}; toast('kid', '付款碼鎖住中，等媽媽確認後才能付款'); return; }
     const blocked = m.cat === '遊戲儲值' && s.blocked.game;
-    if (blocked) { s.pay = {step:'blocked', m}; addFeed('security', `小安嘗試在遊戲平台付款 $${m.amt}，已依封鎖設定攔下`); render(); return; }
-    if (m.amt >= s.threshold) { s.pay = {step:'approval', m, reason:null}; render(); return; }
-    if (m.amt > s.balance) { s.pay = {step:'code', m:null}; toast('kid', '可以用的錢不夠喔'); return; }
-    const weekLeft = Math.max(0, s.budget - s.weekSpent);
-    const remind = s.remindToday < MAX_REMIND && ((REMIND_CATS.includes(m.cat) && m.amt >= 50) || m.amt >= weekLeft / 2) && !s.goalReady;
-    s.pay = {step:remind ? 'choice' : 'confirm', m};
+    if (blocked) { s.pay = {step:'blocked', m, why:'cat'}; addFeed('security', `小安嘗試在遊戲平台付款 $${m.amt}，已依封鎖設定攔下`); render(); return; }
+    // 錢不夠就不用問爸媽了：先檢查罐子
+    if (m.amt > bal()) { s.pay = {step:'code', m:null}; toast('kid', `需要罐和想要罐加起來只有 $${fmt(bal())}，不夠付 $${fmt(m.amt)} 喔`); return; }
+    // 同一筆已經在等爸媽回覆，不重複送出
+    if (s.approvals.some(a => a.status === 'pending' && a.type === 'big' && a.m && a.m.id === m.id)) {
+      s.pay = {step:'code', m:null}; toast('kid', '這筆已經送給爸媽了，等爸媽回覆'); return;
+    }
+    // 超過單筆上限或每月上限：先不付款，通知家長並等家長同意
+    const why = overLimits(m);
+    if (why.length) { s.pay = {step:'approval', m, reason:null, why}; render(); return; }
+    // 「買下去／存起來」只在花想要罐、金額 ≥ $50 時跳出
+    const remind = s.remindToday < MAX_REMIND && m.jar === 'want' && m.amt >= 50 && m.amt <= s.want && !s.goalReady;
+    s.pay = {step:remind ? 'choice' : m.amt > s[m.jar] ? 'borrow' : 'confirm', m};
     if (remind) s.remindToday++;
     render();
   },
   payReason(i) { state.pay.reason = Number(i); render(); },
   payBuy() { doPay(state.pay.m); render(); },
+  payBorrow() { const m = state.pay.m; toast('kid', `用${JAR_INFO[m.jar === 'want' ? 'need' : 'want'].t}罐補了 $${fmt(m.amt - state[m.jar])}`); doPay(m); render(); },
   paySave() {
     const s = state, m = s.pay.m, mom = matchFor(m.amt, 'saveAtPay');
-    s.balance -= m.amt; s.goal.saved += m.amt; s.match.heldThisWeek += mom; s.saveCount++;
+    take(m.amt, m.jar); s.goal.saved += m.amt; s.match.heldThisWeek += mom; s.saveCount++;
     s.pay = null; s.kidView = 'home';
     addFeed('save', `小安選了「存起來」：$${m.amt} 存進${s.goal.name}${mom ? `，配對保留 $${mom}` : ''}`);
     toast('kid', `存進${s.goal.name} $${m.amt}${mom ? `，媽媽陪你存 $${mom}` : ''}`);
@@ -1027,38 +1431,63 @@ const ACT = {
   },
 
   // 錢包
-  walletTab(t) { set({walletTab:t}); },
+  walletTab(t) { set({walletTab:t, jarDraft:null}); },
   openTx(id) { set({openTx:state.openTx === Number(id) ? null : Number(id)}); },
   retag(arg) { const [id, tag] = arg.split('|'); const t = state.tx.find(x => x.id === Number(id)); t.tag = tag; render(); },
   manualAdd() {
-    const s = state; s.balance = Math.max(0, s.balance - 70); s.weekSpent += 70;
+    const s = state; take(Math.min(70, bal()), 'want');
     const t = {id:++seq, when:'今天', store:'夜市', name:'雞排', amt:70, cat:'飲食', tag:null, src:'manual'};
     s.tx.unshift(t); s.openTx = t.id;
     addFeed('spend', '', {store:'夜市', amt:70, items:null, tag:null});
     toast('kid', '已手動補記：夜市雞排 $70，記得標記需要或想要');
   },
   review(id) { state.reviewPick = Number(id); const t = state.tx.find(x => x.id === Number(id)); addFeed('review', `小安的每週回顧：最值得的一筆是「${t.name}」`); toast('par', '小安完成每週回顧'); },
-  setJars(i) { state.jars = JAR_PRESETS[Number(i)].slice(); toast('kid', '三罐子比例已更新，下次零用錢入帳時套用'); },
-  setBudget(b) { state.budget = Number(b); render(); },
+  // 三罐子比例（草稿 jarDraft，按儲存或開始使用才生效）
+  jarStep(arg) {
+    const [i, d] = arg.split('|').map(Number), dr = (state.jarDraft || state.jars).slice();
+    dr[i] = Math.max(0, Math.min(100, dr[i] + d)); set({jarDraft:dr});
+  },
+  jarPreset(i) { set({jarDraft:JAR_PRESETS[Number(i)].slice()}); },
+  saveJars() {
+    const dr = state.jarDraft; if (!dr || dr[0] + dr[1] + dr[2] !== 100) return;
+    state.jars = dr.slice(); state.jarDraft = null; state.jarSheet = false;
+    addFeed('save', `小安調整三罐子比例：儲蓄 ${dr[0]}%・需要 ${dr[1]}%・想要 ${dr[2]}%`);
+    toast('kid', '三罐子比例已更新，下次零用錢入帳時套用');
+  },
+
+  // 初次設定
+  parSetupDone() { set({setup:'kid', jarDraft:null, limitEdit:null}); toast('kid', `媽媽設定好了！每週 $${fmt(state.allowance.amount)}，換你分配罐子`); },
+  setupBack() { set({setup:'parent'}); },
+  kidSetupDone() {
+    const s = state, dr = s.jarDraft || s.jars; if (dr[0] + dr[1] + dr[2] !== 100) return;
+    s.jars = dr.slice(); s.jarDraft = null; s.setup = null; s.kidView = 'home'; s.parView = 'overview';
+    fillWeek(s);
+    const p = portions();
+    addFeed('save', `小安完成設定：每週儲蓄 $${p.save}・需要 $${p.need}・想要 $${p.want}`);
+    toast('kid', '設定完成！零用錢會照你的比例分進三個罐子');
+    toast('par', '小安完成設定，MMA Kids 開始使用');
+  },
+  restart() { Object.values(timers).forEach(clearTimeout); state = initState(); render(); },
 
   // 夢想基金
-  openDeposit(src) { const s = state; set({deposit:{amt:s.balance >= 100 ? 100 : 50, src:src || 'sundayLeft'}}); },
+  openDeposit(src) { set({deposit:{amt:bal() >= 100 ? 100 : 50, src:src || 'sundayLeft'}}); },
   closeDeposit() { set({deposit:null}); },
   depAmt(a) { state.deposit.amt = Number(a); render(); },
   depSrc(k) { state.deposit.src = k; render(); },
   doDeposit() {
-    const s = state, dp = s.deposit; if (dp.amt > s.balance) return;
+    const s = state, dp = s.deposit; if (dp.amt > bal()) return;
     const mk = dp.src === 'family' ? 'gift' : dp.src === 'other' ? null : dp.src;
     const mom = matchFor(dp.amt, mk);
-    s.balance -= dp.amt; s.goal.saved += dp.amt; s.match.heldThisWeek += mom; s.deposit = null;
+    take(dp.amt, 'want'); s.goal.saved += dp.amt; s.match.heldThisWeek += mom; s.deposit = null;
     if (dp.src === 'gift' || dp.src === 'family') s.bigIn = null;
     addFeed('save', `小安存進${s.goal.name} $${dp.amt}${mom ? `，配對保留 $${mom}` : ''}`);
     toast('kid', `存進 $${dp.amt}${mom ? `，媽媽陪你存 $${mom}` : ''}`);
     checkGoal(); render();
   },
   ffGoal() {
-    const s = state; s.goal.saved = 1250; s.match.heldTotal = 450; s.match.heldThisWeek = 0; s.goalReady = false; s.match.paused = false;
-    s.balance = Math.max(s.balance, 200); s.kidView = 'dream';
+    const s = state, cap = Math.min(s.match.goalCap, s.goal.target / 2);
+    s.match.heldTotal = Math.max(0, cap - 50); s.match.heldThisWeek = 0; s.goal.saved = s.goal.target - s.match.heldTotal - 100;
+    s.goalReady = false; s.match.paused = false; s.want = Math.max(s.want, 200); s.kidView = 'dream';
     toast('kid', '（快轉）再存一筆 $50 就達標了！'); },
   sunday() {
     const s = state, m = s.match;
@@ -1066,7 +1495,7 @@ const ACT = {
     if (s.goalReady) {
       const mom = m.heldTotal, me = s.goal.saved;
       s.celebrate = {name:s.goal.name, target:s.goal.target, me, mom};
-      s.balance += me + mom; m.heldTotal = 0; s.goalsDone++; s.kidView = 'dream';
+      s.want += me + mom; m.heldTotal = 0; s.goalsDone++; s.kidView = 'dream';   // 夢想達成：整筆錢可以拿去買夢想
       addFeed('goal', `週日結算：小安的「${s.goal.name}」達成，配對 $${mom} 已撥入`);
       toast('par', `週日結算完成，$${mom} 已撥入小安的 MMA`);
     } else { toast('par', '週日結算完成：本週配對已確認保留'); }
@@ -1083,25 +1512,29 @@ const ACT = {
       addApproval('withdraw', `小安想提前領出${s.goal.name} $300`, 300, r === null ? '' : reasons[r]);
       s.approvalReq = null;
     } else {
-      const p = s.pay, reasons = ['球鞋有特價，想先買便宜的', '我已經存了很久'];
-      addApproval('big', `小安想在${p.m.store}消費 $${fmt(p.m.amt)}（${p.m.name}）`, p.m.amt, p.reason === null ? '' : reasons[p.reason], 'kid', {m:p.m});
+      const p = s.pay, reasons = PAY_REASONS, why = p.why || overLimits(p.m);
+      addApproval('big', `小安想在${p.m.store}消費 $${fmt(p.m.amt)}（${p.m.name}）：${why.join('、')}`, p.m.amt, p.reason === null ? '' : reasons[p.reason], 'kid', {m:p.m});
+      addFeed('security', `小安的一筆 $${fmt(p.m.amt)} 超過上限，等你同意`);
       s.pay = null; s.kidView = 'home';
     }
     toast('kid', '已送出，等爸媽回覆');
   },
   cancelApproval(id) { const a = state.approvals.find(x => x.id === Number(id)); if (a) a.status = 'cancel'; toast('kid', '已取消'); },
   approveYes(id) {
-    const s = state, a = s.approvals.find(x => x.id === Number(id)); a.status = 'ok';
+    const s = state, a = s.approvals.find(x => x.id === Number(id));
+    // 付款碼鎖住（小安回報可疑付款）時，先不扣款，請家長先確認安全
+    if (a.type === 'big' && s.payLocked) { toast('par', '小安的付款碼鎖住中，請先處理可疑付款、解除鎖定後再同意'); return; }
+    a.status = 'ok';
     if (a.type === 'withdraw') {
-      const amt = Math.min(a.amt, s.goal.saved); s.goal.saved -= amt; s.balance += amt;
+      const amt = Math.min(a.amt, s.goal.saved); s.goal.saved -= amt; s.want += amt;
       const cut = Math.min(heldAll(), Math.round(amt * s.match.ratio));
       const fromWeek = Math.min(s.match.heldThisWeek, cut); s.match.heldThisWeek -= fromWeek; s.match.heldTotal -= cut - fromWeek;
-      toast('kid', `爸媽同意了！$${amt} 已領回可以用的錢${cut ? `，媽媽保留的配對也減少 $${cut}` : ''}`);
+      toast('kid', `爸媽同意了！$${amt} 已領回想要罐${cut ? `，媽媽保留的配對也減少 $${cut}` : ''}`);
     } else if (a.type === 'big') {
-      if (a.m.amt > s.balance) { a.status = 'no'; toast('kid', '可以用的錢不夠，這筆已取消'); toast('par', '餘額不足，已取消'); return; }
+      if (a.m.amt > bal()) { a.status = 'no'; toast('kid', '需要罐和想要罐加起來不夠，這筆已取消'); toast('par', '餘額不足，已取消'); return; }
       s.pay = {step:'tag', m:a.m}; s.kidView = 'pay'; doPay(a.m); toast('kid', '爸媽同意了！付款完成');
     } else if (a.type === 'payee') {
-      s.balance = Math.max(0, s.balance - a.amt); toast('kid', '爸媽同意了，已轉帳');
+      take(Math.min(a.amt, bal()), 'want'); toast('kid', '爸媽同意了，已轉帳');
       addAlert('security', '你同意了一筆轉給新收款人的轉帳', '若對方是網路上不認識的買家，請留意假買家詐騙。');
     }
     toast('par', '已同意');
@@ -1111,7 +1544,8 @@ const ACT = {
 
   // 配對（家長）
   setRatio(r) { state.match.ratio = Number(r); render(); },
-  customRatio() { toast('par', '自訂比例：正式版可輸入任意比例'); },
+  setWeekCap(v) { state.match.weekCap = Number(v); render(); },
+  setGoalCap(v) { state.match.goalCap = Number(v); render(); },
   tSource(k) { state.match.sources[k] = !state.match.sources[k]; render(); },
   saveMatch() { toast('par', '配對規則已儲存'); },
   openPause() { set({pauseSheet:{keep:true, note:null}}); },
@@ -1160,9 +1594,15 @@ const ACT = {
 
   // 學堂
   openLesson(id) { set({kidView:'school', lesson:id, quizPick:null, scamQuiz:null}); },
-  closeLesson() { set({lesson:null, quizPick:null}); },
+  closeLesson() {
+    const s = state, l = s.lesson && lessonOf(s.lesson), done = l && s.quizPick === l.c;
+    set({lesson:null, quizPick:null});
+    if (done) toast('kid', `完成「${l.t}」！學堂進度 ${s.lessonsDone.length}／${LESSONS.length}`);
+  },
   answer(i) {
-    const s = state, l = lessonOf(s.lesson); s.quizPick = Number(i);
+    const s = state, l = lessonOf(s.lesson);
+    if (s.quizPick === l.c) return;   // 答對後鎖定，不會再被改成錯的
+    s.quizPick = Number(i);
     if (Number(i) === l.c && !s.lessonsDone.includes(l.id)) { s.lessonsDone.push(l.id); addFeed('lesson', `小安完成學堂「${l.t}」`); }
     render();
   },
@@ -1216,6 +1656,17 @@ const ACT = {
   muleIgnore() { state.scene = null; toast('kid', '做得好！不理會對方，有問題就問爸媽'); },
   sceneHelp() { state.scene = null; ACT.askHelp(); },
   closeScene() { set({scene:null}); },
+  // 學堂情境演練（不通知爸媽、不動到錢）
+  drill(id) { set({kidView:'school', lesson:null, scamQuiz:null, scene:{type:'drill', id, step:0}}); },
+  drillPick(r) { state.scene.step = r; render(); },
+  drillRetry() { state.scene.step = 0; render(); },
+  drillExit() { set({scene:null, kidView:'school'}); },
+  drillDone() {
+    const s = state, x = drillOf(s.scene.id);
+    if (!s.drillsDone.includes(x.id)) { s.drillsDone.push(x.id); addFeed('lesson', `小安完成防詐情境演練「${x.tag}」`); }
+    set({scene:null, kidView:'school'});
+    toast('kid', `完成演練「${x.tag}」！防詐演練 ${s.drillsDone.length}／${DRILLS.length}`);
+  },
   simFakeBuyer() {
     set({scene:{type:'fake'}});
     addAlert('security', '假買家詐騙提醒', '小安準備轉 $300 給新的收款人，對方要求「操作網銀驗證帳戶」。'); toast('par', '防詐警示：疑似假買家詐騙');
@@ -1223,10 +1674,10 @@ const ACT = {
   fakeContinue() {
     const s = state; s.scene = null;
     if (s.newPayee) { addApproval('payee', '小安想轉 $300 給新的收款人（二手平台買家）', 300, '', 'kid'); toast('kid', '第一次轉帳給這個帳戶，需要爸媽同意'); }
-    else { s.balance = Math.max(0, s.balance - 300); toast('kid', '已轉帳 $300'); }
+    else { take(Math.min(300, bal()), 'want'); toast('kid', '已轉帳 $300'); }
     render();
   },
-  heldOk() { const s = state; s.balance += s.heldIncoming.amt; s.heldIncoming = null; toast('kid', '爸媽確認了，款項已入帳'); },
+  heldOk() { const s = state; s.want += s.heldIncoming.amt; s.heldIncoming = null; toast('kid', '爸媽確認了，款項已入帳'); },
   heldReturn() { set({heldIncoming:null}); toast('kid', '這筆陌生轉入已退回並通報'); toast('par', '已退回並通報永豐'); },
 
   // 查看程度與安全設定
@@ -1235,12 +1686,148 @@ const ACT = {
   tPayee() { state.newPayee = !state.newPayee; render(); },
   tBlock(k) { state.blocked[k] = !state.blocked[k]; render(); },
 
+  // 首頁圓餅圖與三罐子比例
+  homePie(k) { set({homePie:k}); },
+  seePie() { set({kidView:'home', homePie:'spent', openTx:null}); },
+  openJars() { set({jarSheet:true, jarDraft:null}); },
+  closeJars() { set({jarSheet:false, jarDraft:null}); },
+
+  // 家長設定：點預設選項／自訂
+  pickField(arg) {
+    const i = arg.indexOf('|'), k = arg.slice(0, i), raw = arg.slice(i + 1), f = FIELDS[k];
+    applyField(k, f.kind === 'time' ? raw : Number(raw));
+  },
+  limitCustom(k) {
+    set({limitEdit:{key:k, val:String(FIELDS[k].get()), err:''}});
+    const el = document.getElementById('limit-input'); if (el) { el.focus(); if (el.select) try { el.select(); } catch (_) {} }
+  },
+  limitCancel() { set({limitEdit:null}); },
+  limitSave() {
+    const e = state.limitEdit; if (!e) return;
+    const f = FIELDS[e.key], raw = String(e.val || '').trim();
+    let v;
+    if (f.kind === 'time') {
+      const mt = raw.match(/^(\d{1,2}):(\d{2})$/);
+      if (!mt || +mt[1] > 23 || +mt[2] > 59) { e.err = '請輸入正確的時間，例如 07:30'; render(); return; }
+      v = `${mt[1].padStart(2, '0')}:${mt[2]}`;
+    } else {
+      const n = Number(raw);
+      v = f.kind === 'ratio' ? Math.round(n * 10) / 10 : Math.round(n);
+      if (!raw || !Number.isFinite(n) || v < f.lo || v > f.hi) { e.err = `請輸入 ${fieldLabel(f, f.lo)}～${fieldLabel(f, f.hi)} 之間的${f.kind === 'ratio' ? '比例' : '金額'}`; render(); return; }
+    }
+    applyField(e.key, v);
+  },
+
+  // 可疑詐騙付款（小安在付款碼頁回報）
+  openSusp(r) { set({susp:{reason:r === undefined || r === '' ? null : Number(r), sent:false}}); },
+  closeSusp() { const sent = state.susp && state.susp.sent; set({susp:null, ...(sent ? {kidView:'pay', pay:{step:'code', m:null}} : {})}); },
+  suspReason(i) { state.susp.reason = Number(i); render(); },
+  sendSusp() {
+    const s = state, r = SUSP_REASONS[s.susp.reason], m = s.pay && s.pay.m;
+    s.susp.sent = true; s.payLocked = true; s.pay = {step:'code', m:null};
+    addAlert('susp', '小安回報可疑詐騙付款', `狀況：${r}${m ? `（${m.store} $${fmt(m.amt)}，未付款）` : ''}。付款碼已先鎖住。請先打電話關心，不要責備。`);
+    addFeed('security', '小安在付款碼頁回報可疑詐騙付款');
+    toast('par', '小安回報可疑付款，付款碼已鎖住');
+  },
+  suspSafe(id) { ACT.ackAlert(id); set({payLocked:false}); toast('kid', '媽媽確認安全，付款碼解鎖了'); toast('par', '已解除付款碼鎖定'); },
+  suspReport(id) { toast('par', '（示範）已通報永豐客服，客服會協助查詢與止付'); addFeed('security', '媽媽已通報永豐客服處理可疑付款'); },
+
+  // 可疑刷卡：卡號被盜用，超過上限＋境外，系統先擋下（不扣款）
+  simCardFraud() {
+    const s = state, f = FRAUD_TX;
+    if (s.alerts.some(a => a.kind === 'card')) return;
+    addAlert('card', `已攔下可疑刷卡 $${fmt(f.amt)}`, `有人在「${f.store}」用小安的卡號刷 $${fmt(f.amt)}（${f.name}）。金額遠超過本月剩下的預算 $${fmt(Math.max(0, s.monthBudget - s.monthSpent))}，又是境外網站，系統已先擋下，沒有扣款。這是小安本人刷的嗎？`);
+    addFeed('security', `可疑刷卡 $${fmt(f.amt)}（${f.store}）已攔下`);
+    s.kidView = 'home'; s.pay = null;
+    toast('kid', `有一筆 $${fmt(f.amt)} 的境外刷卡被擋下了，不是你刷的話別擔心，媽媽會處理`);
+    toast('par', `安全通知：已攔下小安卡片一筆可疑刷卡 $${fmt(f.amt)}`);
+  },
+  cardMine(id) { ACT.ackAlert(id); addFeed('security', '媽媽確認可疑刷卡為小安本人'); toast('par', '已標記為本人。這筆仍未扣款，要買的話請先調整上限'); toast('kid', '媽媽確認了那筆刷卡，有問題記得先問爸媽'); },
+  cardNotMine(id) {
+    ACT.ackAlert(id); state.cardFrozen = true;
+    addFeed('security', '媽媽回報可疑刷卡非本人：卡片已暫停並通報永豐，補發新卡');
+    toast('par', '卡片已暫停並通報永豐，新卡約 7 個工作天寄出');
+    toast('kid', '卡片先暫停了，手機付款碼照常可以用');
+  },
+
+  // 示範選單
+  demoMenu(side) { set({demoMenu:state.demoMenu === side ? null : side}); },
+  demo(arg) {
+    const s = state, [act, a] = arg.split('|');
+    s.demoMenu = null;
+    // 會產生家長警示或請求的情境：家長端切到總覽，讓「需要你處理」看得到
+    if (['simHeld', 'simMule', 'simFakeBuyer', 'simCardFraud', 'expire', 'scan'].includes(act)) s.parView = 'overview';
+    if (['simHeld', 'simMule', 'simFakeBuyer', 'grandma', 'autoAllowance'].includes(act)) { s.pay = null; s.kidView = 'home'; }
+    ACT[act](a);
+    render();
+  },
+  cardRestore() { state.cardFrozen = false; addFeed('security', '小安的新卡已開卡，恢復使用'); toast('kid', '新卡開好了，可以照常刷卡'); toast('par', '已恢復小安的卡片'); },
+
   // 長期
   trustDetail() { toast('par', '（示範）信託明細：每月投入紀錄與給付條件'); },
-  grow() { set({grown:true}); },
-  ungrow() { set({grown:false}); },
-  applyDawho() { toast('par', '（示範）小安以 MMA 資料線上申請 DAWHO'); }
+  grow() {
+    set({grown:true, parView:'overview', pay:null, susp:null, jarSheet:false,
+         dawho:{step:0, id:[false, false, false], fund:'keep', agree:[false, false], share:true}});
+    toast('par', '小安 18 歲生日快樂！MMA Kids 即將升級為 DAWHO');
+  },
+  ungrow() { set({grown:false, kidView:'home', pay:null}); },
+  dawhoStep(n) {
+    const s = state, st = Number(n), prev = s.dawho.step; s.dawho.step = st;
+    if (st === 1 && prev === 0) { addFeed('goal', '小安開始線上申請 DAWHO'); toast('par', '小安開始申請 DAWHO'); }
+    if (st === 6) { addFeed('goal', '小安的 DAWHO 開戶完成，信託 $50,000 已撥入'); toast('kid', '審核通過！DAWHO 帳戶開好了'); toast('par', `小安的 DAWHO 開好了，信託 $${fmt(50000)} 已撥入`); }
+    render();
+  },
+  dawhoId(i) { state.dawho.id[Number(i)] = true; toast('kid', ['身分證已上傳', '第二證件已上傳', '自拍比對成功'][Number(i)]); },
+  dawhoFund(k) { state.dawho.fund = k; render(); },
+  dawhoShare() { state.dawho.share = !state.dawho.share; render(); },
+  dawhoAgree(i) { const a = state.dawho.agree; a[Number(i)] = !a[Number(i)]; render(); },
+  dawhoSubmit() { state.dawho.step = 5; addFeed('goal', '小安送出 DAWHO 開戶申請，審核中'); toast('kid', '簡訊驗證成功，申請已送出'); toast('par', '小安已送出 DAWHO 申請，審核中'); },
+  cheer() { toast('kid', '媽媽：生日快樂！以後要自己好好管錢喔，有問題隨時問我'); toast('par', '祝福已傳給小安'); },
+  applyDawho() { toast('kid', '（示範）開啟 DAWHO App'); }
 };
+
+// ================= 示範選單（非產品畫面，取代原本的示範控制台） =================
+// 每項：[動作|參數, 標籤, 是否可用]
+function demoItems(side) {
+  const s = state, pending = s.approvals.some(a => a.status === 'pending');
+  if (side === 'kid') return s.grown ? [['ungrow', '回到 12 歲']] : [
+    ['hd', '零用錢與紅包'],
+    ['autoAllowance', `零用錢入帳（每${s.allowance.day} ${s.allowance.time}）`, s.allowance.on && !s.allowance.paused],
+    ['grandma', '外婆轉入紅包 $2,000'],
+    ['hd', '付款'],
+    ['scan|shoe', '店員掃碼：跑步鞋 $1,200'],
+    ['hd', '防詐情境（真實流程，會通知媽媽）'],
+    ['simHeld', '① 陌生帳戶轉入 $5,000', !s.heldIncoming],
+    ['simMule', '② 網友要小安把錢轉出（先按 ①）', !!s.heldIncoming],
+    ['simFakeBuyer', '假買家要求補轉 $300'],
+    ['simCardFraud', `卡號被盜刷 $${fmt(FRAUD_TX.amt)}`, !s.alerts.some(a => a.kind === 'card')],
+    ['hd', '夢想基金'],
+    ['ffGoal', '快轉：存到只差一點'],
+    ['sunday', '跳到週日 20:00 結算'],
+    ['hd', '年齡（查看程度會跟著變）'],
+    ...[12, 14, 16].map(a => [`setAge|${a}`, `${a} 歲${s.age === a ? '（目前）' : ''}`, s.age !== a]),
+    ['grow', '跳到 18 歲：升級 DAWHO']];
+  return [
+    ['hd', '防詐情境（真實流程）'],
+    ['simHeld', '① 陌生帳戶轉入 $5,000', !s.heldIncoming && !s.grown],
+    ['simMule', '② 網友要小安把錢轉出（先按 ①）', !!s.heldIncoming && !s.grown],
+    ['simFakeBuyer', '假買家要求補轉 $300', !s.grown],
+    ['simCardFraud', `卡號被盜刷：${FRAUD_TX.store} $${fmt(FRAUD_TX.amt)}`, !s.grown && !s.alerts.some(a => a.kind === 'card')],
+    ['hd', '同意請求'],
+    ['expire', '模擬 24 小時未回覆', pending],
+    ['hd', '重來'],
+    ['restart', '重新設定（回到初次設定）']];
+}
+function demoBtn(side) {
+  if (state.setup) return '';
+  return `<button class="minibtn ${state.demoMenu === side ? 'on' : ''}" data-act="demoMenu" data-arg="${side}" aria-expanded="${state.demoMenu === side}">示範 ▾</button>`;
+}
+function demoMenu(side) {
+  if (state.demoMenu !== side) return '';
+  return `<div class="demomenu" role="menu"><div class="dm-t">示範操作・非產品畫面</div>
+    ${demoItems(side).map(([a, l, on = true]) => a === 'hd' ? `<div class="dm-h">${l}</div>`
+      : `<button class="dm-i" role="menuitem" data-act="demo" data-arg="${a}" ${on ? '' : 'disabled'}>${ic('play', 'width:11px;height:11px')}${l}</button>`).join('')}</div>`;
+}
 
 // ================= 渲染與事件 =================
 const app = document.getElementById('app');
@@ -1248,17 +1835,23 @@ function render() {
   const scrolls = {};
   app.querySelectorAll('[data-sk]').forEach(el => { scrolls[el.dataset.sk] = el.scrollTop; });
   const d = derive();
-  app.innerHTML = `<div class="phonecol"><div class="lbl-phone">孩子端・小安的手機（${state.grown ? 18 : state.age} 歲）</div>${viewKid(d)}</div>
-    <div class="phonecol"><div class="lbl-phone">家長端・媽媽的手機</div>${viewParent(d)}</div>`;
+  app.innerHTML = `<div class="phonecol"><div class="lbl-row"><span class="lbl-phone">孩子端・小安的手機（${state.grown ? 18 : state.age} 歲）</span>${demoBtn('kid')}</div>${demoMenu('kid')}${viewKid(d)}</div>
+    <div class="phonecol"><div class="lbl-row"><span class="lbl-phone">家長端・媽媽的手機</span>${demoBtn('par')}</div>${demoMenu('par')}${viewParent(d)}</div>`;
   app.querySelectorAll('[data-sk]').forEach(el => { if (scrolls[el.dataset.sk]) el.scrollTop = scrolls[el.dataset.sk]; });
 }
 app.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
+  // 示範選單開著時，點選單以外的地方就關掉
+  if (state.demoMenu && !e.target.closest('.demomenu') && !(el && el.dataset.act === 'demoMenu')) { state.demoMenu = null; if (!el) { render(); return; } }
   if (!el || el.disabled) return;
   const fn = ACT[el.dataset.act];
   if (fn) fn(el.dataset.arg);
 });
-app.addEventListener('input', e => { if (e.target.id === 'check-input' && state.check) state.check.text = e.target.value; });
+app.addEventListener('input', e => {
+  if (e.target.id === 'check-input' && state.check) state.check.text = e.target.value;
+  if (e.target.id === 'limit-input' && state.limitEdit) state.limitEdit.val = e.target.value;   // 不重繪，保留游標
+});
+app.addEventListener('keydown', e => { if (e.target.id === 'limit-input' && e.key === 'Enter') ACT.limitSave(); });
 function fit() {
   const W = app.offsetWidth, H = app.offsetHeight, sc = Math.min(innerWidth / W, innerHeight / H);
   app.style.transform = `translate(${(innerWidth - W * sc) / 2}px, ${(innerHeight - H * sc) / 2}px) scale(${sc})`;
